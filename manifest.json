@@ -1,7 +1,7 @@
 {
   "id": "johto_life",
   "name": "Johto Life",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "api": 2,
   "entry": "main.lua",
   "profile": "content",
@@ -13,7 +13,7 @@
   "permissions": ["engine_internals"],
   "dependencies": [],
   "conflicts": ["kanto_life"],
-  "description": "Ambient NPCs + Common Courtesy for Gold/Silver/Crystal. Story dialogue restored; Options OPEN row.",
+  "description": "Ambient NPCs + Common Courtesy. Story dialogue kept; real names prefixed via TextBox.",
   "github": "jtfresh90/Johto-Life-Mod",
   "affects_link": false,
   "experimental": false
