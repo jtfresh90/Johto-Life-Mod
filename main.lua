@@ -1,5 +1,5 @@
 return function(mod)
-  -- Johto Life 0.1.1 — Gen2 only. Compatible with gen1recomp 0.2.x (facade + World:takeWarp).
+  -- Johto Life 0.1.2 — Gen2 only (Gold/Silver/Crystal), gen1recomp 0.2.x
   local function resolveGame()
     if mod.game ~= nil then return mod.game end
     if mod.world and mod.world.game ~= nil then return mod.world.game end
@@ -26,7 +26,6 @@ return function(mod)
   })
   local function opt(k) return mod.options:get(k) end
   local function setOpt(k, v) mod.options:set(k, v) end
-
   local outdoorTouched = mod.save:get("outdoorTouched") and true or false
 
   local townDefaults = {
@@ -39,7 +38,6 @@ return function(mod)
     SAFFRON_CITY = 60, CINNABAR_ISLAND = 10,
   }
   local ROUTE_DEFAULT = 8
-
   local SPRITE_DEFS = {
     { "SPRITE_YOUNGSTER", "m" }, { "SPRITE_LASS", "f" },
     { "SPRITE_BUG_CATCHER", "m" }, { "SPRITE_COOLTRAINER_M", "m" },
@@ -74,27 +72,18 @@ return function(mod)
     "Ruby","Sara","Sofia","Sue","Tina","Vera","Wendy","Zoe",
   }
   local lines = {
-    "I'm headed to the\nMART before sunset.",
-    "JOHTO feels lively\ntoday!",
-    "Have you tried the\nlocal GYM?",
-    "My partner is at\nthe POKEMON CENTER.",
-    "I'm training for\nthe LEAGUE!",
-    "Watch for wild\nPOKEMON in the grass!",
-    "GOLDENROD has the\nbest shops!",
-    "I love the music\nin this town!",
-    "Excuse me, do you\nknow the way?",
-    "I'm visiting family\nin the next town.",
-    "The weather is\nperfect for a stroll!",
-    "TEAM ROCKET better\nstay away!",
-    "I'm saving up for\na BICYCLE!",
-    "Have you seen any\nrare POKEMON?",
+    "I'm headed to the\nMART before sunset.", "JOHTO feels lively\ntoday!",
+    "Have you tried the\nlocal GYM?", "My partner is at\nthe POKEMON CENTER.",
+    "I'm training for\nthe LEAGUE!", "Watch for wild\nPOKEMON in the grass!",
+    "GOLDENROD has the\nbest shops!", "I love the music\nin this town!",
+    "Excuse me, do you\nknow the way?", "I'm visiting family\nin the next town.",
+    "The weather is\nperfect for a stroll!", "TEAM ROCKET better\nstay away!",
+    "I'm saving up for\na BICYCLE!", "Have you seen any\nrare POKEMON?",
     "Don't step on the\nflower beds!",
   }
   local routeLines = {
-    "These routes are\nfull of TRAINERS!",
-    "I'm traveling\nbetween towns.",
-    "Tall grass hides\nsurprises!",
-    "Don't get lost on\nthe long road.",
+    "These routes are\nfull of TRAINERS!", "I'm traveling\nbetween towns.",
+    "Tall grass hides\nsurprises!", "Don't get lost on\nthe long road.",
     "My team needs more\nexperience!",
   }
 
@@ -130,7 +119,6 @@ return function(mod)
     if n > 0 then return n end
     return defaultCount(mapId)
   end
-
   local function pickCell(ow, map)
     if not (ow and map) then return nil end
     local w = map.width or (map.def and map.def.width) or 20
@@ -160,7 +148,6 @@ return function(mod)
     end
     return list
   end
-
   local function spawnAmbient(mapId)
     if not mapId then return end
     if not (isTown(mapId) or isRoute(mapId) or isIndoor(mapId)) then return end
@@ -187,9 +174,7 @@ return function(mod)
       local id, err = mod.world:spawnNpc(mapId, {
         name = name, sprite = sprite, x = x, y = y,
         text = "", movement = "WALK", range = "ANY_DIR",
-        johtoLifeAmbient = true,
-        johtoLifeDisplayName = displayName,
-        johtoLifeGender = gender,
+        johtoLifeAmbient = true, johtoLifeDisplayName = displayName, johtoLifeGender = gender,
       })
       if not id then
         mod.log:warn("Johto Life spawn failed: " .. tostring(err) .. " " .. tostring(sprite))
@@ -207,33 +192,9 @@ return function(mod)
       end
     end
   end
-
   local function refreshCurrentMap()
     local ow = mod.world and mod.world:overworld()
     if ow and ow.map then spawnAmbient(ow.map.id) end
-  end
-
-  if mod.events and mod.events.on then
-    mod.events:on("map.ready", function(p)
-      local id = p and (p.mapId or p.id)
-      if id then spawnAmbient(id) end
-    end)
-    mod.events:on("map.reloaded", function(p)
-      local id = p and (p.mapId or p.id)
-      if id then spawnAmbient(id) end
-    end)
-    mod.events:on("map.entered", function(p)
-      local id = p and (p.mapId or p.id)
-      if id then spawnAmbient(id) end
-    end)
-    mod.events:on("mod.options_changed", function(p)
-      if not p or p.mod ~= mod.id then return end
-      if p.key == "extra_npc_count" then
-        outdoorTouched = true
-        mod.save:set("outdoorTouched", true)
-      end
-      refreshCurrentMap()
-    end)
   end
 
   local function safeRequire(path)
@@ -242,104 +203,74 @@ return function(mod)
     return nil
   end
 
+  -- ===== Options (submenu; value ">" so UI does not show N/A) =====
   local function openJohtoOptions(parentGame)
     local ListMenu = safeRequire("src.ui.ListMenu") or safeRequire("src.menu.ListMenu")
     local g = parentGame or G()
     if not (ListMenu and g and g.stack) then
-      mod.log:warn("Johto Life: ListMenu unavailable; use Mods panel options")
+      mod.log:warn("Johto Life: ListMenu unavailable; change settings under Mods")
       return
     end
     local function rebuild()
-      return {
-        {
-          label = "EXTRA NPCS", text = "EXTRA NPCS",
+      local items = {
+        { text = "EXTRA NPCS", label = "EXTRA NPCS", value = opt("extra_npcs") and "ON" or "OFF",
           right = opt("extra_npcs") and "ON" or "OFF",
-          apply = function()
-            setOpt("extra_npcs", not opt("extra_npcs"))
-            refreshCurrentMap()
-          end,
-        },
-        {
-          label = "EXTRA NPC COUNT", text = "EXTRA NPC COUNT",
+          apply = function() setOpt("extra_npcs", not opt("extra_npcs")); refreshCurrentMap() end },
+        { text = "EXTRA NPC COUNT", label = "EXTRA NPC COUNT",
+          value = tostring(math.floor(tonumber(opt("extra_npc_count")) or 0)),
           right = tostring(math.floor(tonumber(opt("extra_npc_count")) or 0)),
           step = function(dir)
-            outdoorTouched = true
-            mod.save:set("outdoorTouched", true)
-            local n = math.floor(tonumber(opt("extra_npc_count")) or 0)
-            n = math.max(0, math.min(150, n + (dir or 1)))
-            setOpt("extra_npc_count", n)
-            refreshCurrentMap()
+            outdoorTouched = true; mod.save:set("outdoorTouched", true)
+            local n = math.max(0, math.min(150, math.floor(tonumber(opt("extra_npc_count")) or 0) + (dir or 1)))
+            setOpt("extra_npc_count", n); refreshCurrentMap()
           end,
           apply = function()
-            outdoorTouched = true
-            mod.save:set("outdoorTouched", true)
+            outdoorTouched = true; mod.save:set("outdoorTouched", true)
             local n = math.floor(tonumber(opt("extra_npc_count")) or 0)
-            n = (n >= 150) and 0 or (n + 1)
-            setOpt("extra_npc_count", n)
-            refreshCurrentMap()
-          end,
-        },
-        {
-          label = "INDOOR NPCS", text = "INDOOR NPCS",
+            setOpt("extra_npc_count", (n >= 150) and 0 or (n + 1)); refreshCurrentMap()
+          end },
+        { text = "INDOOR NPCS", label = "INDOOR NPCS", value = opt("indoor_npcs") and "ON" or "OFF",
           right = opt("indoor_npcs") and "ON" or "OFF",
-          apply = function()
-            setOpt("indoor_npcs", not opt("indoor_npcs"))
-            refreshCurrentMap()
-          end,
-        },
-        {
-          label = "INDOOR NPC COUNT", text = "INDOOR NPC COUNT",
+          apply = function() setOpt("indoor_npcs", not opt("indoor_npcs")); refreshCurrentMap() end },
+        { text = "INDOOR NPC COUNT", label = "INDOOR NPC COUNT",
+          value = tostring(math.floor(tonumber(opt("indoor_npc_count")) or 3)),
           right = tostring(math.floor(tonumber(opt("indoor_npc_count")) or 3)),
           step = function(dir)
-            local n = math.floor(tonumber(opt("indoor_npc_count")) or 3)
-            n = math.max(0, math.min(30, n + (dir or 1)))
-            setOpt("indoor_npc_count", n)
-            refreshCurrentMap()
+            local n = math.max(0, math.min(30, math.floor(tonumber(opt("indoor_npc_count")) or 3) + (dir or 1)))
+            setOpt("indoor_npc_count", n); refreshCurrentMap()
           end,
           apply = function()
             local n = math.floor(tonumber(opt("indoor_npc_count")) or 3)
-            n = (n >= 30) and 0 or (n + 1)
-            setOpt("indoor_npc_count", n)
-            refreshCurrentMap()
-          end,
-        },
-        {
-          label = "COMMON COURTESY", text = "COMMON COURTESY",
-          right = opt("common_courtesy") and "ON" or "OFF",
-          apply = function() setOpt("common_courtesy", not opt("common_courtesy")) end,
-        },
-        {
-          label = "SLEEPING NPCS", text = "SLEEPING NPCS",
-          right = opt("sleeping_npcs") and "ON" or "OFF",
-          apply = function() setOpt("sleeping_npcs", not opt("sleeping_npcs")) end,
-        },
-        {
-          label = "SLEEP RATE %", text = "SLEEP RATE %",
+            setOpt("indoor_npc_count", (n >= 30) and 0 or (n + 1)); refreshCurrentMap()
+          end },
+        { text = "COMMON COURTESY", label = "COMMON COURTESY",
+          value = opt("common_courtesy") and "ON" or "OFF", right = opt("common_courtesy") and "ON" or "OFF",
+          apply = function() setOpt("common_courtesy", not opt("common_courtesy")) end },
+        { text = "SLEEPING NPCS", label = "SLEEPING NPCS",
+          value = opt("sleeping_npcs") and "ON" or "OFF", right = opt("sleeping_npcs") and "ON" or "OFF",
+          apply = function() setOpt("sleeping_npcs", not opt("sleeping_npcs")) end },
+        { text = "SLEEP RATE %", label = "SLEEP RATE %",
+          value = tostring(math.floor(tonumber(opt("sleep_pct")) or 15)),
           right = tostring(math.floor(tonumber(opt("sleep_pct")) or 15)),
           step = function(dir)
-            local n = math.floor(tonumber(opt("sleep_pct")) or 15)
-            n = math.max(0, math.min(100, n + 5 * (dir or 1)))
+            local n = math.max(0, math.min(100, math.floor(tonumber(opt("sleep_pct")) or 15) + 5 * (dir or 1)))
             setOpt("sleep_pct", n)
           end,
           apply = function()
             local n = math.floor(tonumber(opt("sleep_pct")) or 15)
-            n = (n >= 100) and 0 or (n + 5)
-            setOpt("sleep_pct", n)
-          end,
-        },
-        {
-          label = "DAY SLEEPERS", text = "DAY SLEEPERS",
-          right = opt("day_sleepers") and "ON" or "OFF",
-          apply = function() setOpt("day_sleepers", not opt("day_sleepers")) end,
-        },
+            setOpt("sleep_pct", (n >= 100) and 0 or (n + 5))
+          end },
+        { text = "DAY SLEEPERS", label = "DAY SLEEPERS",
+          value = opt("day_sleepers") and "ON" or "OFF", right = opt("day_sleepers") and "ON" or "OFF",
+          apply = function() setOpt("day_sleepers", not opt("day_sleepers")) end },
       }
+      for _, it in ipairs(items) do
+        it.action = function() if it.apply then it.apply() end end
+        it.onSelect = it.action
+      end
+      return items
     end
     local items = rebuild()
-    for _, it in ipairs(items) do
-      it.action = function()
-        if it.apply then it.apply() end
-      end
-    end
     local ok, menu = pcall(function()
       return ListMenu.new(g, { title = "JOHTO LIFE", items = items })
     end)
@@ -349,12 +280,12 @@ return function(mod)
         menu.update = function(self, dt)
           baseUp(self, dt)
           local input = g.input
-          if not input then return end
+          if not input or not input.pressed then return end
           local idx = self.selected or self.index or 1
           local it = (self.items or items)[idx]
           if it and it.step then
-            if input.pressed and input:pressed("left") then it.step(-1)
-            elseif input.pressed and input:pressed("right") then it.step(1) end
+            if input:pressed("left") then it.step(-1)
+            elseif input:pressed("right") then it.step(1) end
           end
         end
       end
@@ -362,44 +293,45 @@ return function(mod)
     end
   end
 
+  local function johtoLifeRow(g)
+    return {
+      label = "JOHTO LIFE", text = "JOHTO LIFE",
+      right = ">", value = ">",
+      -- engine variants look for one of these
+      onSelect = function() openJohtoOptions(g) end,
+      action = function() openJohtoOptions(g) end,
+      apply = function() openJohtoOptions(g) end,
+      select = function() openJohtoOptions(g) end,
+    }
+  end
+
   if mod.hooks and mod.hooks.wrap then
     pcall(function()
       mod.hooks:wrap("ui.options.items", function(next, g, items)
         local list = next(g, items) or items or {}
-        list[#list + 1] = {
-          label = "JOHTO LIFE", text = "JOHTO LIFE", right = ">",
-          apply = function() openJohtoOptions(g) end,
-          action = function() openJohtoOptions(g) end,
-        }
+        list[#list + 1] = johtoLifeRow(g)
         return list
       end)
     end)
     pcall(function()
       mod.hooks:wrap("ui.options.rows", function(next, g, rows)
         local list = next(g, rows) or rows or {}
-        list[#list + 1] = {
-          label = "JOHTO LIFE", text = "JOHTO LIFE", right = ">",
-          apply = function() openJohtoOptions(g) end,
-          action = function() openJohtoOptions(g) end,
-        }
+        list[#list + 1] = johtoLifeRow(g)
         return list
       end)
     end)
   end
-
   local Options = safeRequire("src.menu.Options") or safeRequire("src.ui.Options")
   if Options and type(Options.buildItems) == "function" then
     local baseBuild = Options.buildItems
     Options.buildItems = function(self, ...)
       local items = baseBuild(self, ...) or {}
-      items[#items + 1] = {
-        label = "JOHTO LIFE", text = "JOHTO LIFE", right = ">",
-        action = function() openJohtoOptions(self.game or G()) end,
-      }
+      items[#items + 1] = johtoLifeRow(self.game or G())
       return items
     end
   end
 
+  -- ===== Common Courtesy (Gen2) =====
   local Overworld = safeRequire("src.world.OverworldController")
   local TextBox = safeRequire("src.render.TextBox")
   local Strings = safeRequire("src.core.Strings")
@@ -442,6 +374,7 @@ return function(mod)
   end
   local excluded = {
     PLAYERS_HOUSE_1F = true, PLAYERS_HOUSE_2F = true,
+    KRISS_HOUSE_1F = true, KRISS_HOUSE_2F = true,
     RIVALS_HOUSE = true, ELMS_HOUSE = true,
   }
   local function isHouseDest(dest)
@@ -489,6 +422,24 @@ return function(mod)
     mod.save:set("pendingTrespass", nil)
     if world then world.johtoLifeTrespass = nil end
   end
+
+  -- Gen2 eject: use warpToMapId / setMap (startWarpTo is Gen1-shaped)
+  local function warpBackTo(world, from)
+    if not (from and from.map) then return false end
+    local x = tonumber(from.x) or 0
+    local y = tonumber(from.y) or 0
+    if world and world.warpToMapId then
+      return world:warpToMapId(from.map, x, y, "down")
+    end
+    if Overworld and Overworld.startWarpTo then
+      return Overworld.startWarpTo(from.map, x, y, "down")
+    end
+    if world and world.setMap then
+      return world:setMap(from.map, x, y, "down")
+    end
+    return false
+  end
+
   local function tryEject(world, toMap)
     if not opt("common_courtesy") then return false end
     world = world or liveWorld()
@@ -499,22 +450,28 @@ return function(mod)
     if world and world.johtoLifeResolving then return false end
     if world then world.johtoLifeResolving = true end
     local from = trespass.from or {}
-    local function warpBack()
-      if world and world.startWarpTo and from.map then
-        world.doorWarp = true
-        world:startWarpTo(from.map, from.x, from.y, "down")
-      elseif Overworld and Overworld.startWarpTo and from.map then
-        Overworld.startWarpTo(from.map, from.x, from.y, "down")
-      end
+    local function finish()
+      warpBackTo(world, from)
       clearTrespass(world)
       if world then world.johtoLifeResolving = false end
     end
-    if not pushText(world, "Please come back\nlater, and KNOCK!", warpBack) then
-      warpBack()
+    if not pushText(world, "Please come back\nlater, and KNOCK!", finish) then
+      finish()
     end
     return true
   end
 
+  local function markTrespass(world, dest, fromMap, fromX, fromY)
+    local t = {
+      home = dest,
+      from = { map = fromMap, x = fromX or 0, y = fromY or 0 },
+    }
+    pendingTrespass = t
+    mod.save:set("pendingTrespass", t)
+    if world then world.johtoLifeTrespass = t end
+  end
+
+  -- player.warped fires BEFORE setMap on Gen2 — only mark, do not eject yet.
   if mod.events and mod.events.on then
     mod.events:on("player.warped", function(payload)
       payload = payload or {}
@@ -525,19 +482,31 @@ return function(mod)
       local h = homes[key(toMap)] or {}
       if h.knocked then return end
       local world = liveWorld()
-      local from = { map = fromMap, x = 0, y = 0 }
-      if world and world.backupMapId then from.map = world.backupMapId end
-      if world and world.backupWarp then
-        local b = world.backupWarp
-        if b.x then from.x = b.x end
-        if b.y then from.y = b.y end
-        if b.map or b.id then from.map = b.map or b.id end
+      local px, py = 0, 0
+      if world and world.player then
+        px = world.player.cellX or 0
+        py = world.player.cellY or 0
       end
-      local t = { home = toMap, from = from }
-      pendingTrespass = t
-      mod.save:set("pendingTrespass", t)
-      if world then world.johtoLifeTrespass = t end
-      pcall(tryEject, world, toMap)
+      markTrespass(world, toMap, fromMap, px, py)
+    end)
+    -- After the house map is actually loaded, eject.
+    local function onMapIn(p)
+      local id = p and (p.mapId or p.id)
+      if id then
+        spawnAmbient(id)
+        tryEject(liveWorld(), id)
+      end
+    end
+    mod.events:on("map.ready", onMapIn)
+    mod.events:on("map.reloaded", onMapIn)
+    mod.events:on("map.entered", onMapIn)
+    mod.events:on("mod.options_changed", function(p)
+      if not p or p.mod ~= mod.id then return end
+      if p.key == "extra_npc_count" then
+        outdoorTouched = true
+        mod.save:set("outdoorTouched", true)
+      end
+      refreshCurrentMap()
     end)
   end
 
@@ -589,17 +558,20 @@ return function(mod)
               return false
             end
             if not isKnown(dest) and not h.knocked then
-              local t = {
-                home = dest,
-                from = { map = self.map.id, x = self.player.cellX, y = self.player.cellY },
-              }
-              self.johtoLifeTrespass = t
-              pendingTrespass = t
-              mod.save:set("pendingTrespass", t)
+              markTrespass(self, dest, self.map.id, self.player.cellX, self.player.cellY)
             end
           end
         end
         return baseWorldWarp(self, warpDef)
+      end
+    end
+    -- Also tick eject from Gen2 World:step if present
+    if World2 and type(World2.step) == "function" then
+      local baseStep = World2.step
+      World2.step = function(self, ...)
+        local r = baseStep(self, ...)
+        if self and self.map then tryEject(self, self.map.id) end
+        return r
       end
     end
 
@@ -639,7 +611,7 @@ return function(mod)
             local h = 0
             for i = 1, #s do h = h + s:byte(i) * i end
             local daySleeper = opt("day_sleepers") and ((h % 10) < 3)
-            local window
+            local window = daySleeper and (not isNight) or false
             if daySleeper then window = not isNight else window = isNight end
             if window and pct > 0 and (h % 100) < pct then
               npc.frozen = true
@@ -681,5 +653,5 @@ return function(mod)
     mod.log:warn("Johto Life: Overworld facade missing")
   end
 
-  mod.log:info("Johto Life 0.1.1 loaded (gen1recomp 0.2.x ready)")
+  mod.log:info("Johto Life 0.1.2 loaded")
 end
