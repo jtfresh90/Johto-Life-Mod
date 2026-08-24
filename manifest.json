@@ -1,7 +1,7 @@
 {
   "id": "johto_life",
   "name": "Johto Life",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "api": 2,
   "entry": "main.lua",
   "profile": "content",
@@ -13,7 +13,7 @@
   "permissions": ["engine_internals"],
   "dependencies": [],
   "conflicts": ["kanto_life"],
-  "description": "Gender-specific stable names for default NPCs. Spawned NPCs keep their own names only.",
+  "description": "Options submenu writes like Mod Manager. Gendered names from real sprite ids.",
   "github": "jtfresh90/Johto-Life-Mod",
   "affects_link": false,
   "experimental": false
