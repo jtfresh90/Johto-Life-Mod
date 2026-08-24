@@ -1,7 +1,7 @@
 {
   "id": "johto_life",
   "name": "Johto Life",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "api": 2,
   "entry": "main.lua",
   "profile": "content",
@@ -13,7 +13,7 @@
   "permissions": ["engine_internals"],
   "dependencies": [],
   "conflicts": ["kanto_life"],
-  "description": "Ambient NPCs walk (WANDER+radius). Full random Pokemon. Options steppers fixed.",
+  "description": "Fix Options left/right crash. Prefix names on all default NPC dialogue.",
   "github": "jtfresh90/Johto-Life-Mod",
   "affects_link": false,
   "experimental": false
