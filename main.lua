@@ -1,5 +1,6 @@
 return function(mod)
-  -- Johto Life 0.1.8 — Gen2 only
+  -- Johto Life 0.1.9 — Gen2 only
+  -- Gen1recomp has NO mod.options:set; Options submenu must write loader buckets.
   local function resolveGame()
     if mod.game ~= nil then return mod.game end
     if mod.world and mod.world.game ~= nil then return mod.world.game end
@@ -24,15 +25,69 @@ return function(mod)
     { key = "day_sleepers", type = "toggle", label = "DAY SLEEPERS", default = true },
     { key = "common_courtesy", type = "toggle", label = "COMMON COURTESY", default = true },
   })
-  local function opt(k) return mod.options:get(k) end
-  local function setOpt(k, v)
-    if mod.options and mod.options.set then return mod.options:set(k, v) end
+
+  local function writeOptionBucket(key, value)
+    local g = G()
+    if not (mod and mod.id) then return false end
+    local function write(bucket)
+      if type(bucket) ~= "table" then return false end
+      bucket[mod.id] = bucket[mod.id] or {}
+      bucket[mod.id][key] = value
+      return true
+    end
+    local wrote = false
+    if g and g.save then
+      g.save.options = g.save.options or {}
+      g.save.options.modOptions = g.save.options.modOptions or {}
+      if write(g.save.options.modOptions) then wrote = true end
+    end
+    if g and g.mods then
+      g.mods.modOptions = g.mods.modOptions or {}
+      if write(g.mods.modOptions) then wrote = true end
+      if g.mods.loader then
+        g.mods.loader.modOptions = g.mods.loader.modOptions or {}
+        if write(g.mods.loader.modOptions) then wrote = true end
+      end
+    end
+    if g and type(g.writeOptions) == "function" then pcall(g.writeOptions, g) end
+    if mod.options and type(mod.options.set) == "function" then
+      pcall(function() mod.options:set(key, value) end)
+      wrote = true
+    end
+    return wrote
   end
+
+  local function opt(k)
+    if mod.options and type(mod.options.get) == "function" then
+      local v = mod.options:get(k)
+      if v ~= nil then return v end
+    end
+    local g = G()
+    local buckets = {}
+    if g and g.save and g.save.options and g.save.options.modOptions then
+      buckets[#buckets + 1] = g.save.options.modOptions[mod.id]
+    end
+    if g and g.mods and g.mods.modOptions then
+      buckets[#buckets + 1] = g.mods.modOptions[mod.id]
+    end
+    if g and g.mods and g.mods.loader and g.mods.loader.modOptions then
+      buckets[#buckets + 1] = g.mods.loader.modOptions[mod.id]
+    end
+    for i = 1, #buckets do
+      local b = buckets[i]
+      if type(b) == "table" and b[k] ~= nil then return b[k] end
+    end
+    return nil
+  end
+
+  local function setOpt(k, v)
+    return writeOptionBucket(k, v)
+  end
+
   local outdoorTouched = mod.save:get("outdoorTouched") and true or false
   local pokeTouched = mod.save:get("pokeTouched") and true or false
 
   local MOVE_WANDER, MOVE_WALK_UD, MOVE_WALK_LR = 2, 4, 5
-
   local townDefaults = {
     NEW_BARK_TOWN = 12, CHERRYGROVE_CITY = 20, VIOLET_CITY = 40,
     AZALEA_TOWN = 25, GOLDENROD_CITY = 80, ECRUTEAK_CITY = 50,
@@ -73,46 +128,19 @@ return function(mod)
     "Ruby","Sara","Sofia","Sue","Tina","Vera","Wendy","Zoe",
   }
   local POKE_LIST = {
-    "BULBASAUR","IVYSAUR","VENUSAUR","CHARMANDER","CHARMELEON","CHARIZARD",
-    "SQUIRTLE","WARTORTLE","BLASTOISE","CATERPIE","METAPOD","BUTTERFREE",
-    "WEEDLE","KAKUNA","BEEDRILL","PIDGEY","PIDGEOTTO","PIDGEOT",
-    "RATTATA","RATICATE","SPEAROW","FEAROW","EKANS","ARBOK",
-    "PIKACHU","RAICHU","SANDSHREW","SANDSLASH","NIDORAN_F","NIDORINA","NIDOQUEEN",
-    "NIDORAN_M","NIDORINO","NIDOKING","CLEFAIRY","CLEFABLE","VULPIX","NINETALES",
-    "JIGGLYPUFF","WIGGLYTUFF","ZUBAT","GOLBAT","ODDISH","GLOOM","VILEPLUME",
-    "PARAS","PARASECT","VENONAT","VENOMOTH","DIGLETT","DUGTRIO",
-    "MEOWTH","PERSIAN","PSYDUCK","GOLDUCK","MANKEY","PRIMEAPE",
-    "GROWLITHE","ARCANINE","POLIWAG","POLIWHIRL","POLIWRATH",
-    "ABRA","KADABRA","ALAKAZAM","MACHOP","MACHOKE","MACHAMP",
-    "BELLSPROUT","WEEPINBELL","VICTREEBEL","TENTACOOL","TENTACRUEL",
-    "GEODUDE","GRAVELER","GOLEM","PONYTA","RAPIDASH",
-    "SLOWPOKE","SLOWBRO","MAGNEMITE","MAGNETON","FARFETCH_D",
-    "DODUO","DODRIO","SEEL","DEWGONG","GRIMER","MUK",
-    "SHELLDER","CLOYSTER","GASTLY","HAUNTER","GENGAR","ONIX",
-    "DROWZEE","HYPNO","KRABBY","KINGLER","VOLTORB","ELECTRODE",
-    "EXEGGCUTE","EXEGGUTOR","CUBONE","MAROWAK","HITMONLEE","HITMONCHAN",
-    "LICKITUNG","KOFFING","WEEZING","RHYHORN","RHYDON","CHANSEY",
-    "TANGELA","KANGASKHAN","HORSEA","SEADRA","GOLDEEN","SEAKING",
-    "STARYU","STARMIE","MR_MIME","SCYTHER","JYNX","ELECTABUZZ","MAGMAR",
-    "PINSIR","TAUROS","MAGIKARP","GYARADOS","LAPRAS","DITTO","EEVEE",
-    "VAPOREON","JOLTEON","FLAREON","PORYGON","OMANYTE","OMASTAR",
-    "KABUTO","KABUTOPS","AERODACTYL","SNORLAX","ARTICUNO","ZAPDOS","MOLTRES",
-    "DRATINI","DRAGONAIR","DRAGONITE","MEWTWO","MEW",
-    "CHIKORITA","BAYLEEF","MEGANIUM","CYNDAQUIL","QUILAVA","TYPHLOSION",
-    "TOTODILE","CROCONAW","FERALIGATR","SENTRET","FURRET","HOOTHOOT","NOCTOWL",
-    "LEDYBA","LEDIAN","SPINARAK","ARIADOS","CROBAT","CHINCHOU","LANTURN",
-    "PICHU","CLEFFA","IGGLYBUFF","TOGEPI","TOGETIC","NATU","XATU",
-    "MAREEP","FLAAFFY","AMPHAROS","BELLOSSOM","MARILL","AZUMARILL","SUDOWOODO",
-    "POLITOED","HOPPIP","SKIPLOOM","JUMPLUFF","AIPOM","SUNKERN","SUNFLORA",
-    "YANMA","WOOPER","QUAGSIRE","ESPEON","UMBREON","MURKROW","SLOWKING",
-    "MISDREAVUS","UNOWN","WOBBUFFET","GIRAFARIG","PINECO","FORRETRESS",
-    "DUNSPARCE","GLIGAR","STEELIX","SNUBBULL","GRANBULL","QWILFISH","SCIZOR",
-    "SHUCKLE","HERACROSS","SNEASEL","TEDDIURSA","URSARING","SLUGMA","MAGCARGO",
-    "SWINUB","PILOSWINE","CORSOLA","REMORAID","OCTILLERY","DELIBIRD","MANTINE",
-    "SKARMORY","HOUNDOUR","HOUNDOOM","KINGDRA","PHANPY","DONPHAN","PORYGON2",
-    "STANTLER","SMEARGLE","TYROGUE","HITMONTOP","SMOOCHUM","ELEKID","MAGBY",
-    "MILTANK","BLISSEY","RAIKOU","ENTEI","SUICUNE","LARVITAR","PUPITAR",
-    "TYRANITAR","LUGIA","HO_OH","CELEBI",
+    "PIDGEY","RATTATA","SPEAROW","PIKACHU","SANDSHREW","NIDORAN_F","NIDORAN_M",
+    "CLEFAIRY","VULPIX","JIGGLYPUFF","ZUBAT","ODDISH","PARAS","MEOWTH","PSYDUCK",
+    "MANKEY","GROWLITHE","POLIWAG","ABRA","MACHOP","BELLSPROUT","TENTACOOL",
+    "GEODUDE","PONYTA","SLOWPOKE","MAGNEMITE","FARFETCH_D","DODUO","SEEL",
+    "GRIMER","SHELLDER","GASTLY","ONIX","DROWZEE","KRABBY","VOLTORB","EXEGGCUTE",
+    "CUBONE","KOFFING","RHYHORN","CHANSEY","TANGELA","HORSEA","GOLDEEN","STARYU",
+    "SCYTHER","JYNX","ELECTABUZZ","MAGMAR","PINSIR","TAUROS","MAGIKARP","EEVEE",
+    "SENTRET","HOOTHOOT","LEDYBA","SPINARAK","CHINCHOU","PICHU","CLEFFA","IGGLYBUFF",
+    "TOGEPI","NATU","MAREEP","MARILL","HOPPIP","AIPOM","SUNKERN","YANMA","WOOPER",
+    "MURKROW","MISDREAVUS","GIRAFARIG","PINECO","DUNSPARCE","GLIGAR","SNUBBULL",
+    "QWILFISH","SHUCKLE","HERACROSS","SNEASEL","TEDDIURSA","SLUGMA","SWINUB",
+    "CORSOLA","REMORAID","DELIBIRD","MANTINE","SKARMORY","HOUNDOUR","PHANPY",
+    "STANTLER","SMEARGLE","TYROGUE","SMOOCHUM","ELEKID","MAGBY","MILTANK",
   }
   local POKE_CRY_LINES = { "%s!", "%s!\n%s!", "%s?", "%s...", "%s!\n%s?" }
   local lines = {
@@ -255,10 +283,7 @@ return function(mod)
     if not id and isPoke then
       id = trySpawn(monName) or trySpawn("SPRITE_POKEMON") or trySpawn("SPRITE_POKE_BALL")
     end
-    if not id then
-      mod.log:warn("Johto Life spawn failed: " .. tostring(err))
-      return nil
-    end
+    if not id then return nil end
     for _, n in ipairs(ow.npcs or {}) do
       if n.id == id or (n.def and n.def.name == name) then
         n.def = n.def or {}
@@ -317,15 +342,16 @@ return function(mod)
 
   local function navPressed(input, dir)
     if not input then return false end
+    if type(input.wasPressed) == "function" then
+      local ok, v = pcall(function() return input:wasPressed(dir) end)
+      if ok and v then return true end
+    end
     if type(input.pressed) == "table" and input.pressed[dir] then return true end
     if type(input.down) == "function" then
       local ok, v = pcall(function() return input:down(dir) end)
       if ok and v then return true end
     end
     if type(input.state) == "table" and input.state[dir] then return true end
-    if love and love.keyboard and love.keyboard.isDown and love.keyboard.isDown(dir) then
-      return true
-    end
     return false
   end
 
@@ -395,7 +421,6 @@ return function(mod)
         if fresh[i] and it.label ~= "CANCEL" then
           it.right = fresh[i].right
           it.value = fresh[i].right
-          it.text = fresh[i].right
         end
       end
     end
@@ -413,20 +438,26 @@ return function(mod)
         local baseUp = menuRef.update
         local heldL, heldR = false, false
         menuRef.update = function(self, dt)
-          baseUp(self, dt)
           local input = g and g.input
           local idx = self.selected or self.index or 1
           local it = (self.items or items)[idx]
-          if not it or it.label == "CANCEL" then heldL, heldR = false, false return end
-          local left, right = navPressed(input, "left"), navPressed(input, "right")
-          if left and not heldL then
-            if it.step then it.step(-1) elseif it.onSelect then it.onSelect() end
-            refreshRights(self)
-          elseif right and not heldR then
-            if it.step then it.step(1) elseif it.onSelect then it.onSelect() end
-            refreshRights(self)
+          local left = navPressed(input, "left")
+          local right = navPressed(input, "right")
+          if it and it.label ~= "CANCEL" then
+            if left and not heldL then
+              if it.step then it.step(-1) elseif it.onSelect then it.onSelect() end
+              refreshRights(self)
+              heldL, heldR = left, right
+              return
+            elseif right and not heldR then
+              if it.step then it.step(1) elseif it.onSelect then it.onSelect() end
+              refreshRights(self)
+              heldL, heldR = left, right
+              return
+            end
           end
           heldL, heldR = left, right
+          baseUp(self, dt)
         end
       end
       if menuRef and g and g.stack then g.stack:push(menuRef) end
@@ -457,7 +488,7 @@ return function(mod)
           id = "johto_life:open", label = "JOHTO LIFE",
           text = function() return "OPEN" end,
           value = function() return "OPEN" end,
-          activate = function(g) openJohtoOptions(g or gameArg) end,
+          activate = function(gg) openJohtoOptions(gg or gameArg) end,
         })
       end)
     end)
@@ -522,7 +553,6 @@ return function(mod)
   local function pushText(world, msg, onDone, opts)
     local g = G()
     if g and g.stack and TextBox and Strings then
-      -- Skip TextBox name-prefix for our own ambient dialogue
       g.stack:push(TextBox.new(g, Strings(msg), onDone, opts))
       return true
     end
@@ -587,39 +617,80 @@ return function(mod)
     SPRITE_MOM = "MOM", MOM = "MOM", SPRITE_ELM = "PROF.ELM", ELM = "PROF.ELM",
     SPRITE_NURSE = "NURSE", NURSE = "NURSE", SPRITE_CLERK = "CLERK",
     SPRITE_RECEPTIONIST = "RECEPTIONIST", SPRITE_SILVER = "SILVER",
-    SPRITE_OAK = "PROF.OAK", OAK = "PROF.OAK", SPRITE_BILL = "BILL",
-    SPRITE_KURT = "KURT", SPRITE_FALKNER = "FALKNER", SPRITE_BUGSY = "BUGSY",
-    SPRITE_WHITNEY = "WHITNEY", SPRITE_MORTY = "MORTY", SPRITE_CHUCK = "CHUCK",
-    SPRITE_JASMINE = "JASMINE", SPRITE_PRYCE = "PRYCE", SPRITE_CLAIR = "CLAIR",
-    SPRITE_WILL = "WILL", SPRITE_KOGA = "KOGA", SPRITE_BRUNO = "BRUNO",
-    SPRITE_KAREN = "KAREN", SPRITE_LANCE = "LANCE", SPRITE_RED = "RED",
+    SPRITE_OAK = "PROF.OAK", SPRITE_BILL = "BILL", SPRITE_KURT = "KURT",
+    SPRITE_FALKNER = "FALKNER", SPRITE_BUGSY = "BUGSY", SPRITE_WHITNEY = "WHITNEY",
+    SPRITE_MORTY = "MORTY", SPRITE_CHUCK = "CHUCK", SPRITE_JASMINE = "JASMINE",
+    SPRITE_PRYCE = "PRYCE", SPRITE_CLAIR = "CLAIR", SPRITE_WILL = "WILL",
+    SPRITE_KOGA = "KOGA", SPRITE_BRUNO = "BRUNO", SPRITE_KAREN = "KAREN",
+    SPRITE_LANCE = "LANCE", SPRITE_RED = "RED",
   }
-  -- Exact female sprite tokens (avoid partial false matches)
   local FEMALE_SPRITE_EXACT = {
-    SPRITE_LASS = true, LASS = true, SPRITE_BEAUTY = true, BEAUTY = true,
-    SPRITE_TWIN = true, TWIN = true, SPRITE_TEACHER = true, TEACHER = true,
-    SPRITE_SKIER = true, SKIER = true, SPRITE_BUENA = true, BUENA = true,
-    SPRITE_SWIMMER_GIRL = true, SWIMMER_GIRL = true,
-    SPRITE_POKEFAN_F = true, POKEFAN_F = true,
-    SPRITE_COOLTRAINER_F = true, COOLTRAINER_F = true,
-    SPRITE_GRANNY = true, GRANNY = true, SPRITE_NURSE = true, NURSE = true,
-    SPRITE_MOM = true, MOM = true, SPRITE_RECEPTIONIST = true,
-    SPRITE_WHITNEY = true, SPRITE_JASMINE = true, SPRITE_CLAIR = true,
-    SPRITE_KAREN = true, SPRITE_KIMONO_GIRL = true,
+    SPRITE_LASS=true, LASS=true, SPRITE_BEAUTY=true, BEAUTY=true,
+    SPRITE_TWIN=true, TWIN=true, SPRITE_TEACHER=true, TEACHER=true,
+    SPRITE_SKIER=true, SKIER=true, SPRITE_BUENA=true, BUENA=true,
+    SPRITE_SWIMMER_GIRL=true, SWIMMER_GIRL=true,
+    SPRITE_POKEFAN_F=true, POKEFAN_F=true,
+    SPRITE_COOLTRAINER_F=true, COOLTRAINER_F=true,
+    SPRITE_GRANNY=true, GRANNY=true, SPRITE_NURSE=true, NURSE=true,
+    SPRITE_MOM=true, MOM=true, SPRITE_RECEPTIONIST=true, RECEPTIONIST=true,
+    SPRITE_WHITNEY=true, SPRITE_JASMINE=true, SPRITE_CLAIR=true,
+    SPRITE_KAREN=true, SPRITE_KIMONO_GIRL=true, KIMONO_GIRL=true,
+  }
+  local MALE_SPRITE_EXACT = {
+    SPRITE_YOUNGSTER=true, YOUNGSTER=true, SPRITE_BUG_CATCHER=true,
+    SPRITE_COOLTRAINER_M=true, COOLTRAINER_M=true, SPRITE_SUPER_NERD=true,
+    SPRITE_ROCKER=true, SPRITE_POKEFAN_M=true, POKEFAN_M=true,
+    SPRITE_GRAMPS=true, GRAMPS=true, SPRITE_SCHOOLBOY=true,
+    SPRITE_FISHER=true, SPRITE_BIRD_KEEPER=true, SPRITE_SCIENTIST=true,
+    SPRITE_OFFICER=true, SPRITE_SAGE=true, SPRITE_BOARDER=true,
+    SPRITE_SAILOR=true, SPRITE_SWIMMER_GUY=true, SWIMMER_GUY=true,
+    SPRITE_BLACK_BELT=true, SPRITE_HIKER=true, SPRITE_GUITARIST=true,
+    SPRITE_BIKER=true, SPRITE_BURGLAR=true, SPRITE_FIREBREATHER=true,
+    SPRITE_JUGGLER=true, SPRITE_PSYCHIC=true, SPRITE_SCHOOLBOY=true,
+    SPRITE_SILVER=true, SPRITE_ELM=true, SPRITE_OAK=true, SPRITE_BILL=true,
+    SPRITE_KURT=true, SPRITE_FALKNER=true, SPRITE_BUGSY=true, SPRITE_MORTY=true,
+    SPRITE_CHUCK=true, SPRITE_PRYCE=true, SPRITE_WILL=true, SPRITE_KOGA=true,
+    SPRITE_BRUNO=true, SPRITE_LANCE=true, SPRITE_RED=true, SPRITE_BLUE=true,
   }
   local function spriteKeyOf(npc)
-    local d = npc and npc.def or {}
-    local spr = d.sprite or npc.spriteId or d.spriteId
-    if type(spr) == "string" then return spr:upper() end
-    if type(spr) == "number" then return tostring(spr) end
+    if not npc then return "" end
+    local d = npc.def or {}
+    -- Prefer live sheet id (Gen2 often keeps only a number on def.sprite)
+    if npc.sprite and type(npc.sprite.id) == "string" then
+      return npc.sprite.id:upper()
+    end
+    if type(npc.spriteId) == "string" then return npc.spriteId:upper() end
+    if type(d.sprite) == "string" then return d.sprite:upper() end
+    if type(d.spriteId) == "string" then return d.spriteId:upper() end
+    -- Numeric: try game sprite tables for a name
+    local idx = tonumber(d.sprite) or tonumber(npc.spriteId)
+    if idx then
+      local g = G()
+      local data = g and g.data
+      local sprites = data and (data.gen2Sprites or data.sprites)
+      if type(sprites) == "table" then
+        for k, v in pairs(sprites) do
+          if type(v) == "table" and (v.index == idx or v.id == idx or v.tile == idx) then
+            return tostring(k):upper()
+          end
+          if type(k) == "string" and type(v) == "table" and v == npc.sprite then
+            return k:upper()
+          end
+        end
+      end
+      return "SPR_" .. tostring(idx)
+    end
     return ""
   end
   local function genderFromNpc(npc)
     local spr = spriteKeyOf(npc)
     if FEMALE_SPRITE_EXACT[spr] then return "f" end
-    if spr:find("_F$") or spr:find("_F_") or spr:find("GIRL") then return "f" end
-    if spr:find("_M$") or spr:find("_M_") or spr:find("GUY") or spr:find("GRAMPS") then return "m" end
-    -- unknown / numeric sprite: alternate by cell hash, not all one gender
+    if MALE_SPRITE_EXACT[spr] then return "m" end
+    if spr:find("_F$") or spr:find("_F_") or spr:find("GIRL", 1, true) then return "f" end
+    if spr:find("_M$") or spr:find("_M_") or spr:find("GUY", 1, true) then return "m" end
+    if spr:find("GRAMPS", 1, true) or spr:find("HIKER", 1, true) then return "m" end
+    if spr:find("GRANNY", 1, true) or spr:find("BEAUTY", 1, true) then return "f" end
+    -- last resort: alternate by unique position so not all same gender
     local cx = tonumber(npc and npc.cellX) or 0
     local cy = tonumber(npc and npc.cellY) or 0
     local idx = tonumber(npc and npc.def and npc.def.index) or 0
@@ -653,7 +724,6 @@ return function(mod)
     return (ok and s) or ""
   end
   local function textAlreadyNamed(text)
-    -- Any "Name:\n" or "Name: " prefix — do not double-prefix
     return type(text) == "string" and text:match("^[%a][%w%s%.%-']*:%s*[\n ]") ~= nil
   end
   local function isAmbientNpc(npc)
@@ -666,9 +736,7 @@ return function(mod)
   end
   local function storyDisplayName(npc)
     if not npc then return nil end
-    -- Never rename or re-prefix spawned / ambient NPCs
     if isAmbientNpc(npc) then return nil end
-    -- Cache on the NPC instance (not def — def may be shared)
     if type(npc.johtoLifeStoryName) == "string" and npc.johtoLifeStoryName ~= "" then
       return npc.johtoLifeStoryName
     end
@@ -696,7 +764,6 @@ return function(mod)
       npc.johtoLifeStoryName = STORY_SPRITE_NAMES[spr]
       return npc.johtoLifeStoryName
     end
-    -- exact key only (no partial find — that caused wrong shared names)
     local sk = tostring(d.scriptKey or "")
     local from = sk:match("([%a]+)Script")
     if from and #from >= 3 and #from <= 12 then
@@ -712,8 +779,7 @@ return function(mod)
   end
   local function prefixStoryText(body, name)
     local text = bodyToString(body)
-    if text == "" then return body end
-    if textAlreadyNamed(text) then return body end
+    if text == "" or textAlreadyNamed(text) then return body end
     return name .. ":\n" .. text
   end
 
@@ -722,13 +788,9 @@ return function(mod)
     local baseShowText = World2.showText
     World2.showText = function(self, body, onDone, stay, hold)
       local text = bodyToString(body)
-      if textAlreadyNamed(text) then
-        return baseShowText(self, body, onDone, stay, hold)
-      end
+      if textAlreadyNamed(text) then return baseShowText(self, body, onDone, stay, hold) end
       local talker = self and self.talkNpc
-      if isAmbientNpc(talker) then
-        return baseShowText(self, body, onDone, stay, hold)
-      end
+      if isAmbientNpc(talker) then return baseShowText(self, body, onDone, stay, hold) end
       local nm = storyDisplayName(talker)
       if nm then body = prefixStoryText(body, nm) end
       return baseShowText(self, body, onDone, stay, hold)
@@ -738,14 +800,10 @@ return function(mod)
     local baseTB = TextBox.new
     TextBox.new = function(gameArg, text, onDone, opts)
       local raw = bodyToString(text)
-      if textAlreadyNamed(raw) then
-        return baseTB(gameArg, text, onDone, opts)
-      end
+      if textAlreadyNamed(raw) then return baseTB(gameArg, text, onDone, opts) end
       local world = liveWorld()
       local talker = world and world.talkNpc
-      if isAmbientNpc(talker) then
-        return baseTB(gameArg, text, onDone, opts)
-      end
+      if isAmbientNpc(talker) then return baseTB(gameArg, text, onDone, opts) end
       local nm = storyDisplayName(talker)
       if nm then text = prefixStoryText(text, nm) end
       return baseTB(gameArg, text, onDone, opts)
@@ -885,7 +943,7 @@ return function(mod)
             local s = tostring(npc.id or d.name or "")
             local h = 0; for i = 1, #s do h = h + s:byte(i) * i end
             local daySleeper = opt("day_sleepers") and ((h % 10) < 3)
-            local window
+            local window = daySleeper and (not isNight) or isNight
             if daySleeper then window = not isNight else window = isNight end
             if window and pct > 0 and (h % 100) < pct then
               npc.frozen = true; npc.nightlifeSleeping = true
@@ -929,5 +987,5 @@ return function(mod)
     mod.log:warn("Johto Life: Overworld facade missing")
   end
 
-  mod.log:info("Johto Life 0.1.8 loaded")
+  mod.log:info("Johto Life 0.1.9 loaded")
 end
