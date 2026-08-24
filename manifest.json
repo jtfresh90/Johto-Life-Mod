@@ -1,7 +1,7 @@
 {
   "id": "johto_life",
   "name": "Johto Life",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "api": 2,
   "entry": "main.lua",
   "profile": "content",
@@ -13,7 +13,7 @@
   "permissions": ["engine_internals"],
   "dependencies": [],
   "conflicts": ["kanto_life"],
-  "description": "Ambient NPCs + Common Courtesy. Story dialogue kept; real names prefixed via TextBox.",
+  "description": "Ambient NPCs walk (WANDER+radius). Full random Pokemon. Options steppers fixed.",
   "github": "jtfresh90/Johto-Life-Mod",
   "affects_link": false,
   "experimental": false
