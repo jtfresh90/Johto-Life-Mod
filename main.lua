@@ -1,15 +1,12 @@
 return function(mod)
-  -- Johto Life 0.1.5 — Gen2 only
+  -- Johto Life 0.1.6 — Gen2 only
   local function resolveGame()
     if mod.game ~= nil then return mod.game end
     if mod.world and mod.world.game ~= nil then return mod.world.game end
     return nil
   end
   local game = resolveGame()
-  local function G()
-    game = resolveGame() or game
-    return game
-  end
+  local function G() game = resolveGame() or game; return game end
 
   mod.options:define({
     { key = "extra_npcs", type = "toggle", label = "EXTRA NPCS", default = true },
@@ -33,6 +30,12 @@ return function(mod)
   end
   local outdoorTouched = mod.save:get("outdoorTouched") and true or false
   local pokeTouched = mod.save:get("pokeTouched") and true or false
+
+  -- Gen2 SPRITEMOVEDATA bytes (src/world/gen2/Npc.lua MOVE table)
+  local MOVE_WANDER = 2
+  local MOVE_WALK_UD = 4
+  local MOVE_WALK_LR = 5
+  local MOVE_POKEMON = 0x16
 
   local townDefaults = {
     NEW_BARK_TOWN = 12, CHERRYGROVE_CITY = 20, VIOLET_CITY = 40,
@@ -58,10 +61,6 @@ return function(mod)
     { "SPRITE_BOARDER", "m" }, { "SPRITE_SKIER", "f" },
     { "SPRITE_BUENA", "f" }, { "SPRITE_SAILOR", "m" },
     { "SPRITE_SWIMMER_GUY", "m" }, { "SPRITE_SWIMMER_GIRL", "f" },
-    { "YOUNGSTER", "m" }, { "LASS", "f" }, { "BUG_CATCHER", "m" },
-    { "COOLTRAINER_M", "m" }, { "COOLTRAINER_F", "f" },
-    { "BEAUTY", "f" }, { "POKEFAN_M", "m" }, { "GRAMPS", "m" },
-    { "FISHER", "m" }, { "SAILOR", "m" },
   }
   local MALE_NAMES = {
     "Aaron","Adam","Alex","Andrew","Ben","Blake","Brian","Caleb","Carlos","Chris",
@@ -77,14 +76,48 @@ return function(mod)
     "Mary","Megan","Mia","Molly","Nancy","Nina","Olivia","Paige","Rachel","Rose",
     "Ruby","Sara","Sofia","Sue","Tina","Vera","Wendy","Zoe",
   }
+  -- Full Gen 1–2 species ids (random each spawn)
   local POKE_LIST = {
-    "PIDGEY","RATTATA","SENTRET","HOOTHOOT","LEDYBA","SPINARAK","PICHU","CLEFFA",
-    "IGGLYBUFF","TOGEPI","MAREEP","MARILL","HOPPIP","AIPOM","SUNKERN","YANMA",
-    "WOOPER","MURKROW","MISDREAVUS","WOBBUFFET","GIRAFARIG","PINECO","DUNSPARCE",
-    "GLIGAR","SNUBBULL","QWILFISH","SHUCKLE","HERACROSS","SNEASEL","TEDDIURSA",
-    "SLUGMA","SWINUB","CORSOLA","REMORAID","DELIBIRD","MANTINE","SKARMORY",
-    "HOUNDOUR","PHANPY","STANTLER","SMEARGLE","TYROGUE","SMOOCHUM","ELEKID",
-    "MAGBY","MILTANK","LARVITAR","CHIKORITA","CYNDAQUIL","TOTODILE",
+    "BULBASAUR","IVYSAUR","VENUSAUR","CHARMANDER","CHARMELEON","CHARIZARD",
+    "SQUIRTLE","WARTORTLE","BLASTOISE","CATERPIE","METAPOD","BUTTERFREE",
+    "WEEDLE","KAKUNA","BEEDRILL","PIDGEY","PIDGEOTTO","PIDGEOT",
+    "RATTATA","RATICATE","SPEAROW","FEAROW","EKANS","ARBOK",
+    "PIKACHU","RAICHU","SANDSHREW","SANDSLASH","NIDORAN_F","NIDORINA","NIDOQUEEN",
+    "NIDORAN_M","NIDORINO","NIDOKING","CLEFAIRY","CLEFABLE","VULPIX","NINETALES",
+    "JIGGLYPUFF","WIGGLYTUFF","ZUBAT","GOLBAT","ODDISH","GLOOM","VILEPLUME",
+    "PARAS","PARASECT","VENONAT","VENOMOTH","DIGLETT","DUGTRIO",
+    "MEOWTH","PERSIAN","PSYDUCK","GOLDUCK","MANKEY","PRIMEAPE",
+    "GROWLITHE","ARCANINE","POLIWAG","POLIWHIRL","POLIWRATH",
+    "ABRA","KADABRA","ALAKAZAM","MACHOP","MACHOKE","MACHAMP",
+    "BELLSPROUT","WEEPINBELL","VICTREEBEL","TENTACOOL","TENTACRUEL",
+    "GEODUDE","GRAVELER","GOLEM","PONYTA","RAPIDASH",
+    "SLOWPOKE","SLOWBRO","MAGNEMITE","MAGNETON","FARFETCH_D",
+    "DODUO","DODRIO","SEEL","DEWGONG","GRIMER","MUK",
+    "SHELLDER","CLOYSTER","GASTLY","HAUNTER","GENGAR","ONIX",
+    "DROWZEE","HYPNO","KRABBY","KINGLER","VOLTORB","ELECTRODE",
+    "EXEGGCUTE","EXEGGUTOR","CUBONE","MAROWAK","HITMONLEE","HITMONCHAN",
+    "LICKITUNG","KOFFING","WEEZING","RHYHORN","RHYDON","CHANSEY",
+    "TANGELA","KANGASKHAN","HORSEA","SEADRA","GOLDEEN","SEAKING",
+    "STARYU","STARMIE","MR_MIME","SCYTHER","JYNX","ELECTABUZZ","MAGMAR",
+    "PINSIR","TAUROS","MAGIKARP","GYARADOS","LAPRAS","DITTO","EEVEE",
+    "VAPOREON","JOLTEON","FLAREON","PORYGON","OMANYTE","OMASTAR",
+    "KABUTO","KABUTOPS","AERODACTYL","SNORLAX","ARTICUNO","ZAPDOS","MOLTRES",
+    "DRATINI","DRAGONAIR","DRAGONITE","MEWTWO","MEW",
+    "CHIKORITA","BAYLEEF","MEGANIUM","CYNDAQUIL","QUILAVA","TYPHLOSION",
+    "TOTODILE","CROCONAW","FERALIGATR","SENTRET","FURRET","HOOTHOOT","NOCTOWL",
+    "LEDYBA","LEDIAN","SPINARAK","ARIADOS","CROBAT","CHINCHOU","LANTURN",
+    "PICHU","CLEFFA","IGGLYBUFF","TOGEPI","TOGETIC","NATU","XATU",
+    "MAREEP","FLAAFFY","AMPHAROS","BELLOSSOM","MARILL","AZUMARILL","SUDOWOODO",
+    "POLITOED","HOPPIP","SKIPLOOM","JUMPLUFF","AIPOM","SUNKERN","SUNFLORA",
+    "YANMA","WOOPER","QUAGSIRE","ESPEON","UMBREON","MURKROW","SLOWKING",
+    "MISDREAVUS","UNOWN","WOBBUFFET","GIRAFARIG","PINECO","FORRETRESS",
+    "DUNSPARCE","GLIGAR","STEELIX","SNUBBULL","GRANBULL","QWILFISH","SCIZOR",
+    "SHUCKLE","HERACROSS","SNEASEL","TEDDIURSA","URSARING","SLUGMA","MAGCARGO",
+    "SWINUB","PILOSWINE","CORSOLA","REMORAID","OCTILLERY","DELIBIRD","MANTINE",
+    "SKARMORY","HOUNDOUR","HOUNDOOM","KINGDRA","PHANPY","DONPHAN","PORYGON2",
+    "STANTLER","SMEARGLE","TYROGUE","HITMONTOP","SMOOCHUM","ELEKID","MAGBY",
+    "MILTANK","BLISSEY","RAIKOU","ENTEI","SUICUNE","LARVITAR","PUPITAR",
+    "TYRANITAR","LUGIA","HO_OH","CELEBI",
   }
   local POKE_CRY_LINES = { "%s!", "%s!\n%s!", "%s?", "%s...", "%s!\n%s?" }
   local lines = {
@@ -190,36 +223,59 @@ return function(mod)
     end
     return list
   end
+
   local function spawnOne(ow, map, mapId, isPoke)
     local x, y = pickCell(ow, map)
     if not x then return nil end
     spawnSerial = spawnSerial + 1
-    local sprite, gender, displayName, monName
+    local sprite, gender, displayName, monName, movement, radius
     if isPoke then
-      monName = POKE_LIST[love.math.random(#POKE_LIST)]
-      displayName, sprite, gender = monName, "SPRITE_" .. monName, "m"
+      -- Fully random each spawn (index from full list)
+      monName = POKE_LIST[love.math.random(1, #POKE_LIST)]
+      displayName = monName
+      gender = "m"
+      -- Prefer species OW sprite; fall back to generic POKEMON sheet
+      sprite = "SPRITE_" .. monName
+      movement = MOVE_WANDER
+      radius = { x = 2, y = 2 }
     else
       local def = SPRITE_DEFS[love.math.random(#SPRITE_DEFS)]
       sprite, gender = def[1], def[2]
       displayName = randomName(gender)
+      -- Numeric WANDER + radius required on Gen2 (string "WALK" becomes STILL)
+      local roll = love.math.random(1, 3)
+      if roll == 1 then movement = MOVE_WALK_UD
+      elseif roll == 2 then movement = MOVE_WALK_LR
+      else movement = MOVE_WANDER end
+      radius = { x = 3, y = 3 }
     end
     local tag = isPoke and "JOHTO_POKE_" or "JOHTO_NPC_"
-    local name = tag .. tostring(mapId) .. "_" .. spawnSerial
-    local id, err = mod.world:spawnNpc(mapId, {
-      name = name, sprite = sprite, x = x, y = y, text = "",
-      movement = "WALK", range = "ANY_DIR", moving = true,
-      johtoLifeAmbient = true, johtoLifePokemon = isPoke and true or nil,
-      johtoLifeDisplayName = displayName, johtoLifeGender = gender, johtoLifeMon = monName,
-    })
-    if not id and isPoke then
-      id = mod.world:spawnNpc(mapId, {
-        name = name, sprite = "SPRITE_POKE_BALL", x = x, y = y, text = "",
-        movement = "WALK", range = "ANY_DIR", moving = true,
-        johtoLifeAmbient = true, johtoLifePokemon = true,
-        johtoLifeDisplayName = displayName, johtoLifeMon = monName,
+    local name = tag .. tostring(mapId) .. "_" .. spawnSerial .. "_" .. tostring(love.math.random(100000))
+    local function trySpawn(spr)
+      return mod.world:spawnNpc(mapId, {
+        name = name, sprite = spr, x = x, y = y, text = "",
+        movement = movement,
+        radius = radius,
+        johtoLifeAmbient = true,
+        johtoLifePokemon = isPoke and true or nil,
+        johtoLifeDisplayName = displayName,
+        johtoLifeGender = gender,
+        johtoLifeMon = monName,
       })
     end
-    if not id then return nil end
+    local id, err = trySpawn(sprite)
+    if not id and isPoke then
+      -- alternate sprite id forms, then generic POKEMON / ball
+      id = trySpawn(monName)
+      if not id then id = trySpawn("SPRITE_POKEMON") end
+      if not id then
+        id = trySpawn("SPRITE_POKE_BALL")
+      end
+    end
+    if not id then
+      mod.log:warn("Johto Life spawn failed: " .. tostring(err) .. " " .. tostring(sprite))
+      return nil
+    end
     for _, n in ipairs(ow.npcs or {}) do
       if n.id == id or (n.def and n.def.name == name) then
         n.def = n.def or {}
@@ -228,11 +284,22 @@ return function(mod)
         n.def.johtoLifeDisplayName = displayName
         n.def.johtoLifeMon = monName
         n.frozen = false
+        -- ensure wander state after pool spawn
+        if n.kind == nil or n.kind == "stand" then
+          n.kind = "walk"
+          n.roamDirs = { "up", "down", "left", "right" }
+          n.radiusX = (radius and radius.x) or 3
+          n.radiusY = (radius and radius.y) or 3
+          n.homeX = n.cellX or x
+          n.homeY = n.cellY or y
+          n.timer = love.math.random(20, 90)
+        end
         return n
       end
     end
     return true
   end
+
   local function spawnAmbient(mapId)
     if not mapId then return end
     if not (isTown(mapId) or isRoute(mapId) or isIndoor(mapId)) then return end
@@ -266,64 +333,206 @@ return function(mod)
     return nil
   end
 
+  -- ===== Options submenu with live steppers (A / left / right) =====
   local function openJohtoOptions(parentGame)
     local g = parentGame or G()
-    local function rebuild()
+    local menuRef
+
+    local function rebuildItems()
       local items = {
-        { label = "EXTRA NPCS", right = opt("extra_npcs") and "ON" or "OFF",
-          onSelect = function() setOpt("extra_npcs", not opt("extra_npcs")); refreshCurrentMap() end },
-        { label = "NPC COUNT", right = tostring(math.floor(tonumber(opt("extra_npc_count")) or 0)),
+        {
+          label = "EXTRA NPCS",
+          right = opt("extra_npcs") and "ON" or "OFF",
+          stepper = true,
+          onSelect = function()
+            setOpt("extra_npcs", not opt("extra_npcs"))
+            refreshCurrentMap()
+          end,
+        },
+        {
+          label = "NPC COUNT",
+          right = tostring(math.floor(tonumber(opt("extra_npc_count")) or 0)),
+          stepper = true,
+          step = function(dir)
+            outdoorTouched = true; mod.save:set("outdoorTouched", true)
+            local n = math.floor(tonumber(opt("extra_npc_count")) or 0) + (dir or 1)
+            n = math.max(0, math.min(150, n))
+            setOpt("extra_npc_count", n)
+            refreshCurrentMap()
+          end,
           onSelect = function()
             outdoorTouched = true; mod.save:set("outdoorTouched", true)
             local n = math.floor(tonumber(opt("extra_npc_count")) or 0)
-            setOpt("extra_npc_count", (n >= 150) and 0 or (n + 1)); refreshCurrentMap()
-          end },
-        { label = "INDOOR NPCS", right = opt("indoor_npcs") and "ON" or "OFF",
-          onSelect = function() setOpt("indoor_npcs", not opt("indoor_npcs")); refreshCurrentMap() end },
-        { label = "INDOOR COUNT", right = tostring(math.floor(tonumber(opt("indoor_npc_count")) or 3)),
+            setOpt("extra_npc_count", (n >= 150) and 0 or (n + 1))
+            refreshCurrentMap()
+          end,
+        },
+        {
+          label = "INDOOR NPCS",
+          right = opt("indoor_npcs") and "ON" or "OFF",
+          stepper = true,
+          onSelect = function()
+            setOpt("indoor_npcs", not opt("indoor_npcs"))
+            refreshCurrentMap()
+          end,
+        },
+        {
+          label = "INDOOR COUNT",
+          right = tostring(math.floor(tonumber(opt("indoor_npc_count")) or 3)),
+          stepper = true,
+          step = function(dir)
+            local n = math.floor(tonumber(opt("indoor_npc_count")) or 3) + (dir or 1)
+            n = math.max(0, math.min(30, n))
+            setOpt("indoor_npc_count", n)
+            refreshCurrentMap()
+          end,
           onSelect = function()
             local n = math.floor(tonumber(opt("indoor_npc_count")) or 3)
-            setOpt("indoor_npc_count", (n >= 30) and 0 or (n + 1)); refreshCurrentMap()
-          end },
-        { label = "POKE NPCS", right = opt("pokemon_npcs") and "ON" or "OFF",
-          onSelect = function() setOpt("pokemon_npcs", not opt("pokemon_npcs")); refreshCurrentMap() end },
-        { label = "POKE COUNT", right = tostring(math.floor(tonumber(opt("pokemon_npc_count")) or 0)),
+            setOpt("indoor_npc_count", (n >= 30) and 0 or (n + 1))
+            refreshCurrentMap()
+          end,
+        },
+        {
+          label = "POKE NPCS",
+          right = opt("pokemon_npcs") and "ON" or "OFF",
+          stepper = true,
+          onSelect = function()
+            setOpt("pokemon_npcs", not opt("pokemon_npcs"))
+            refreshCurrentMap()
+          end,
+        },
+        {
+          label = "POKE COUNT",
+          right = tostring(math.floor(tonumber(opt("pokemon_npc_count")) or 0)),
+          stepper = true,
+          step = function(dir)
+            pokeTouched = true; mod.save:set("pokeTouched", true)
+            local n = math.floor(tonumber(opt("pokemon_npc_count")) or 0) + (dir or 1)
+            n = math.max(0, math.min(50, n))
+            setOpt("pokemon_npc_count", n)
+            refreshCurrentMap()
+          end,
           onSelect = function()
             pokeTouched = true; mod.save:set("pokeTouched", true)
             local n = math.floor(tonumber(opt("pokemon_npc_count")) or 0)
-            setOpt("pokemon_npc_count", (n >= 50) and 0 or (n + 1)); refreshCurrentMap()
-          end },
-        { label = "COURTESY", right = opt("common_courtesy") and "ON" or "OFF",
-          onSelect = function() setOpt("common_courtesy", not opt("common_courtesy")) end },
-        { label = "SLEEP NPCS", right = opt("sleeping_npcs") and "ON" or "OFF",
-          onSelect = function() setOpt("sleeping_npcs", not opt("sleeping_npcs")) end },
-        { label = "SLEEP %", right = tostring(math.floor(tonumber(opt("sleep_pct")) or 15)),
+            setOpt("pokemon_npc_count", (n >= 50) and 0 or (n + 1))
+            refreshCurrentMap()
+          end,
+        },
+        {
+          label = "COURTESY",
+          right = opt("common_courtesy") and "ON" or "OFF",
+          stepper = true,
+          onSelect = function() setOpt("common_courtesy", not opt("common_courtesy")) end,
+        },
+        {
+          label = "SLEEP NPCS",
+          right = opt("sleeping_npcs") and "ON" or "OFF",
+          stepper = true,
+          onSelect = function() setOpt("sleeping_npcs", not opt("sleeping_npcs")) end,
+        },
+        {
+          label = "SLEEP %",
+          right = tostring(math.floor(tonumber(opt("sleep_pct")) or 15)),
+          stepper = true,
+          step = function(dir)
+            local n = math.floor(tonumber(opt("sleep_pct")) or 15) + 5 * (dir or 1)
+            n = math.max(0, math.min(100, n))
+            setOpt("sleep_pct", n)
+          end,
           onSelect = function()
             local n = math.floor(tonumber(opt("sleep_pct")) or 15)
             setOpt("sleep_pct", (n >= 100) and 0 or (n + 5))
-          end },
-        { label = "DAY SLEEP", right = opt("day_sleepers") and "ON" or "OFF",
-          onSelect = function() setOpt("day_sleepers", not opt("day_sleepers")) end },
+          end,
+        },
+        {
+          label = "DAY SLEEP",
+          right = opt("day_sleepers") and "ON" or "OFF",
+          stepper = true,
+          onSelect = function() setOpt("day_sleepers", not opt("day_sleepers")) end,
+        },
         { label = "CANCEL", onSelect = function() end },
       }
       return items
     end
+
+    local function refreshRights(menu)
+      if not menu or not menu.items then return end
+      local fresh = rebuildItems()
+      for i, it in ipairs(menu.items) do
+        if fresh[i] and it.label ~= "CANCEL" then
+          it.right = fresh[i].right
+          it.value = fresh[i].right
+          it.text = fresh[i].right
+        end
+      end
+    end
+
+    local items = rebuildItems()
     if mod.ui and mod.ui.ListMenu and mod.ui.ListMenu.new then
-      local items = rebuild()
-      local menu = mod.ui.ListMenu.new(g, "JOHTO LIFE", items, {
+      menuRef = mod.ui.ListMenu.new(g, "JOHTO LIFE", items, {
         onChoose = function(item, m)
-          if item and item.onSelect then item.onSelect() end
-          if item and item.label == "CANCEL" and m and m.close then m:close() end
+          if not item then return end
+          if item.label == "CANCEL" then
+            if m and m.close then m:close() end
+            return
+          end
+          if item.onSelect then item.onSelect() end
+          refreshRights(m)
+          -- stay open so player can keep adjusting
         end,
       })
-      if menu and g and g.stack then g.stack:push(menu) end
+      if menuRef and type(menuRef.update) == "function" then
+        local baseUp = menuRef.update
+        menuRef.update = function(self, dt)
+          baseUp(self, dt)
+          local input = g and g.input
+          if not (input and input.pressed) then return end
+          local idx = self.selected or self.index or 1
+          local it = (self.items or items)[idx]
+          if not it or it.label == "CANCEL" then return end
+          if it.step then
+            if input:pressed("left") then it.step(-1); refreshRights(self)
+            elseif input:pressed("right") then it.step(1); refreshRights(self) end
+          elseif it.stepper and it.onSelect then
+            if input:pressed("left") or input:pressed("right") then
+              it.onSelect(); refreshRights(self)
+            end
+          end
+        end
+      end
+      if menuRef and g and g.stack then g.stack:push(menuRef) end
       return
     end
+
     local ListMenu = safeRequire("src.ui.ListMenu") or safeRequire("src.menu.ListMenu")
     if ListMenu and g and g.stack then
-      local items = rebuild()
-      local ok, menu = pcall(function() return ListMenu.new(g, { title = "JOHTO LIFE", items = items }) end)
-      if ok and menu then g.stack:push(menu) end
+      for _, it in ipairs(items) do
+        it.text = it.label
+        it.value = it.right
+        it.apply = it.onSelect
+        it.action = it.onSelect
+      end
+      local ok, menu = pcall(function()
+        return ListMenu.new(g, { title = "JOHTO LIFE", items = items })
+      end)
+      if ok and menu then
+        local baseUp = menu.update
+        if type(baseUp) == "function" then
+          menu.update = function(self, dt)
+            baseUp(self, dt)
+            local input = g.input
+            if not (input and input.pressed) then return end
+            local idx = self.selected or self.index or 1
+            local it = (self.items or items)[idx]
+            if it and it.step then
+              if input:pressed("left") then it.step(-1)
+              elseif input:pressed("right") then it.step(1) end
+            end
+          end
+        end
+        g.stack:push(menu)
+      end
     end
   end
 
@@ -476,31 +685,23 @@ return function(mod)
     if world then world.johtoLifeTrespass = t end
   end
 
-  -- Story names: real assigned names only (never random Aaron/Amy for story)
   local STORY_SPRITE_NAMES = {
     SPRITE_MOM = "MOM", MOM = "MOM", SPRITE_ELM = "PROF.ELM", ELM = "PROF.ELM",
     SPRITE_NURSE = "NURSE", NURSE = "NURSE", SPRITE_CLERK = "CLERK",
-    SPRITE_RECEPTIONIST = "RECEPTIONIST", SPRITE_SILVER = "SILVER",
-    SPRITE_RIVAL = "SILVER", SPRITE_RED = "RED", SPRITE_BLUE = "BLUE",
-    SPRITE_OAK = "PROF.OAK", OAK = "PROF.OAK", SPRITE_BILL = "BILL",
+    SPRITE_SILVER = "SILVER", SPRITE_OAK = "PROF.OAK", SPRITE_BILL = "BILL",
     SPRITE_KURT = "KURT", SPRITE_FALKNER = "FALKNER", SPRITE_BUGSY = "BUGSY",
     SPRITE_WHITNEY = "WHITNEY", SPRITE_MORTY = "MORTY", SPRITE_CHUCK = "CHUCK",
     SPRITE_JASMINE = "JASMINE", SPRITE_PRYCE = "PRYCE", SPRITE_CLAIR = "CLAIR",
-    SPRITE_WILL = "WILL", SPRITE_KOGA = "KOGA", SPRITE_BRUNO = "BRUNO",
-    SPRITE_KAREN = "KAREN", SPRITE_LANCE = "LANCE",
   }
   local function bodyToString(body)
     if body == nil then return "" end
     if type(body) == "string" then return body end
-    if type(body) == "table" then
-      if type(body.text) == "string" then return body.text end
-      if type(body[1]) == "string" then return body[1] end
-    end
+    if type(body) == "table" and type(body.text) == "string" then return body.text end
     local ok, s = pcall(tostring, body)
     return (ok and s) or ""
   end
   local function alreadyHasName(text, name)
-    if not text or not name or name == "" then return false end
+    if not text or not name then return false end
     local t, n = text:upper(), name:upper()
     if t:sub(1, #n) == n then
       local c = t:sub(#n + 1, #n + 1)
@@ -512,34 +713,30 @@ return function(mod)
     if not npc then return nil end
     local d = npc.def or {}
     if d.johtoLifeAmbient then return nil end
-    if type(d.johtoLifeStoryName) == "string" and d.johtoLifeStoryName ~= "" then
-      return d.johtoLifeStoryName
-    end
-    if type(d.name) == "string" and #d.name >= 2 and #d.name <= 14 then
-      if d.name:match("^[%a][%a%s%.%-]*$") and not d.name:find("JOHTO_", 1, true) then
-        return d.name:upper()
-      end
+    if type(d.name) == "string" and #d.name >= 2 and #d.name <= 14
+        and d.name:match("^[%a][%a%s%.%-]*$") then
+      return d.name:upper()
     end
     local tr = d.trainer
     if type(tr) == "table" then
-      local class = type(tr.class) == "string" and tr.class or nil
-      local tname = type(tr.name) == "string" and tr.name or nil
-      if class and tname and #tname > 0 then return (class .. " " .. tname):upper() end
-      if tname and #tname > 0 then return tname:upper() end
-      if class and #class > 0 then return class:upper() end
+      if type(tr.name) == "string" and tr.name ~= "" then
+        if type(tr.class) == "string" and tr.class ~= "" then
+          return (tr.class .. " " .. tr.name):upper()
+        end
+        return tr.name:upper()
+      end
+      if type(tr.class) == "string" and tr.class ~= "" then return tr.class:upper() end
     end
     local spr = tostring(d.sprite or ""):upper()
     if STORY_SPRITE_NAMES[spr] then return STORY_SPRITE_NAMES[spr] end
     for k, v in pairs(STORY_SPRITE_NAMES) do
       if spr:find(k, 1, true) then return v end
     end
-    local sk = tostring(d.scriptKey or d.script or "")
+    local sk = tostring(d.scriptKey or "")
     local from = sk:match("([%a]+)Script")
     if from and #from >= 3 and #from <= 12 then
       local u = from:upper()
-      if u ~= "OBJECT" and u ~= "STD" and u ~= "GENERIC" and u ~= "ITEM" and u ~= "HIDDEN" then
-        return u
-      end
+      if u ~= "OBJECT" and u ~= "STD" and u ~= "GENERIC" then return u end
     end
     return nil
   end
@@ -549,7 +746,6 @@ return function(mod)
     return name .. ":\n" .. text
   end
 
-  -- Deep hooks: keep vanilla body, prefix real name when talkNpc is set
   local World2 = safeRequire("src.world.gen2.World")
   if World2 and type(World2.showText) == "function" then
     local baseShowText = World2.showText
@@ -677,7 +873,17 @@ return function(mod)
       end
       for _, npc in ipairs(world.npcs or {}) do
         local d = npc.def or {}
-        if d.johtoLifeAmbient and not npc.nightlifeSleeping then npc.frozen = false end
+        if d.johtoLifeAmbient and not npc.nightlifeSleeping then
+          npc.frozen = false
+          if npc.kind == "stand" or npc.kind == nil then
+            npc.kind = "walk"
+            npc.roamDirs = npc.roamDirs or { "up", "down", "left", "right" }
+            if (npc.radiusX or 0) == 0 then npc.radiusX = 3 end
+            if (npc.radiusY or 0) == 0 then npc.radiusY = 3 end
+            npc.homeX = npc.homeX or npc.cellX
+            npc.homeY = npc.homeY or npc.cellY
+          end
+        end
       end
       if opt("sleeping_npcs") then
         local pct = math.floor(tonumber(opt("sleep_pct")) or 15)
@@ -736,5 +942,5 @@ return function(mod)
     mod.log:warn("Johto Life: Overworld facade missing")
   end
 
-  mod.log:info("Johto Life 0.1.5 loaded")
+  mod.log:info("Johto Life 0.1.6 loaded")
 end
