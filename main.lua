@@ -1,5 +1,5 @@
 return function(mod)
-  -- Johto Life 0.1.2 — Gen2 only (Gold/Silver/Crystal), gen1recomp 0.2.x
+  -- Johto Life 0.1.3 — Gen2 only
   local function resolveGame()
     if mod.game ~= nil then return mod.game end
     if mod.world and mod.world.game ~= nil then return mod.world.game end
@@ -18,15 +18,20 @@ return function(mod)
     { key = "indoor_npcs", type = "toggle", label = "INDOOR NPCS", default = true },
     { key = "indoor_npc_count", type = "number", label = "INDOOR NPC COUNT",
       default = 3, min = 0, max = 30, step = 1 },
+    { key = "pokemon_npcs", type = "toggle", label = "POKEMON NPCS", default = true },
+    { key = "pokemon_npc_count", type = "number", label = "POKEMON NPC COUNT",
+      default = 0, min = 0, max = 50, step = 1 },
     { key = "sleeping_npcs", type = "toggle", label = "SLEEPING NPCS", default = true },
     { key = "sleep_pct", type = "number", label = "SLEEP RATE %",
       default = 15, min = 0, max = 100, step = 5 },
     { key = "day_sleepers", type = "toggle", label = "DAY SLEEPERS", default = true },
     { key = "common_courtesy", type = "toggle", label = "COMMON COURTESY", default = true },
+    { key = "name_all_npcs", type = "toggle", label = "NAME ALL NPCS", default = true },
   })
   local function opt(k) return mod.options:get(k) end
   local function setOpt(k, v) mod.options:set(k, v) end
   local outdoorTouched = mod.save:get("outdoorTouched") and true or false
+  local pokeTouched = mod.save:get("pokeTouched") and true or false
 
   local townDefaults = {
     NEW_BARK_TOWN = 12, CHERRYGROVE_CITY = 20, VIOLET_CITY = 40,
@@ -38,6 +43,7 @@ return function(mod)
     SAFFRON_CITY = 60, CINNABAR_ISLAND = 10,
   }
   local ROUTE_DEFAULT = 8
+
   local SPRITE_DEFS = {
     { "SPRITE_YOUNGSTER", "m" }, { "SPRITE_LASS", "f" },
     { "SPRITE_BUG_CATCHER", "m" }, { "SPRITE_COOLTRAINER_M", "m" },
@@ -70,6 +76,23 @@ return function(mod)
     "Jenny","Jill","Joy","Kate","Kelly","Laura","Lily","Lisa","Lucy","Maria",
     "Mary","Megan","Mia","Molly","Nancy","Nina","Olivia","Paige","Rachel","Rose",
     "Ruby","Sara","Sofia","Sue","Tina","Vera","Wendy","Zoe",
+  }
+  -- Overworld-friendly Johto mons (names used as display + dialogue)
+  local POKE_LIST = {
+    "PIDGEY","RATTATA","SENTRET","HOOTHOOT","LEDYBA","SPINARAK","PICHU","CLEFFA",
+    "IGGLYBUFF","TOGEPI","MAREEP","MARILL","HOPPIP","AIPOM","SUNKERN","YANMA",
+    "WOOPER","MURKROW","MISDREAVUS","WOBBUFFET","GIRAFARIG","PINECO","DUNSPARCE",
+    "GLIGAR","SNUBBULL","QWILFISH","SHUCKLE","HERACROSS","SNEASEL","TEDDIURSA",
+    "SLUGMA","SWINUB","CORSOLA","REMORAID","DELIBIRD","MANTINE","SKARMORY",
+    "HOUNDOUR","PHANPY","STANTLER","SMEARGLE","TYROGUE","SMOOCHUM","ELEKID",
+    "MAGBY","MILTANK","LARVITAR","CHIKORITA","CYNDAQUIL","TOTODILE",
+  }
+  local POKE_CRY_LINES = {
+    "%s!",
+    "%s!\n%s!",
+    "%s?",
+    "%s...",
+    "%s!\n%s?",
   }
   local lines = {
     "I'm headed to the\nMART before sunset.", "JOHTO feels lively\ntoday!",
@@ -119,79 +142,173 @@ return function(mod)
     if n > 0 then return n end
     return defaultCount(mapId)
   end
+  local function pokeTarget(mapId)
+    if not opt("pokemon_npcs") then return 0 end
+    if not (isTown(mapId) or isRoute(mapId)) then return 0 end
+    if pokeTouched then
+      return math.max(0, math.floor(tonumber(opt("pokemon_npc_count")) or 0))
+    end
+    return math.max(0, math.floor(tonumber(opt("pokemon_npc_count")) or 0))
+  end
+
+  local function cellHasWarp(map, x, y)
+    if not map then return false end
+    local entry = nil
+    if map.warpAt then entry = map:warpAt(x, y) end
+    if not entry and map.warpAtCell then entry = map:warpAtCell(x, y) end
+    if entry then return true end
+    -- scan warp list on map.def
+    local warps = map.def and map.def.warps or map.warps
+    if type(warps) == "table" then
+      for _, w in pairs(warps) do
+        if type(w) == "table" and w.x == x and w.y == y then return true end
+      end
+    end
+    return false
+  end
+
   local function pickCell(ow, map)
     if not (ow and map) then return nil end
     local w = map.width or (map.def and map.def.width) or 20
     local h = map.height or (map.def and map.def.height) or 18
-    for _ = 1, 40 do
-      local x = love.math.random(1, math.max(1, w - 2))
-      local y = love.math.random(1, math.max(1, h - 2))
+    for _ = 1, 60 do
+      local x = love.math.random(2, math.max(2, w - 3))
+      local y = love.math.random(2, math.max(2, h - 3))
       local blocked = false
       if map.isWalkable and not map:isWalkable(x, y) then blocked = true end
       if map.isWalkableCell and not map:isWalkableCell(x, y) then blocked = true end
-      for _, e in ipairs(ow.entities or ow.npcs or {}) do
-        if e.cellX == x and e.cellY == y then blocked = true break end
+      if cellHasWarp(map, x, y) then blocked = true end
+      -- also avoid adjacent door tiles so they don't stand in front of doors
+      if not blocked then
+        for dx = -1, 1 do
+          for dy = -1, 1 do
+            if cellHasWarp(map, x + dx, y + dy) then blocked = true end
+          end
+        end
+      end
+      if not blocked then
+        for _, e in ipairs(ow.entities or ow.npcs or {}) do
+          if e.cellX == x and e.cellY == y then blocked = true break end
+        end
       end
       if not blocked then return x, y end
     end
     return nil
   end
+
   local function randomName(g)
     local pool = (g == "f") and FEMALE_NAMES or MALE_NAMES
     return pool[love.math.random(#pool)]
   end
-  local function liveAmbient(ow)
+  local function liveAmbient(ow, pokeOnly)
     local list = {}
     for _, n in ipairs((ow and ow.npcs) or {}) do
       local d = n.def or {}
-      if d.johtoLifeAmbient then list[#list + 1] = n end
+      if d.johtoLifeAmbient then
+        local isPoke = d.johtoLifePokemon and true or false
+        if pokeOnly == nil or pokeOnly == isPoke then list[#list + 1] = n end
+      end
     end
     return list
   end
+
+  local function spawnOne(ow, map, mapId, isPoke)
+    local x, y = pickCell(ow, map)
+    if not x then return nil end
+    spawnSerial = spawnSerial + 1
+    local sprite, gender, displayName, monName
+    if isPoke then
+      monName = POKE_LIST[love.math.random(#POKE_LIST)]
+      displayName = monName
+      -- Prefer overworld mon sprite if engine knows it; fall back to common sprites
+      sprite = "SPRITE_" .. monName
+      gender = "m"
+    else
+      local def = SPRITE_DEFS[love.math.random(#SPRITE_DEFS)]
+      sprite, gender = def[1], def[2]
+      displayName = randomName(gender)
+    end
+    local tag = isPoke and "JOHTO_POKE_" or "JOHTO_NPC_"
+    local name = tag .. tostring(mapId) .. "_" .. spawnSerial
+    local id, err = mod.world:spawnNpc(mapId, {
+      name = name,
+      sprite = sprite,
+      x = x, y = y,
+      text = "",
+      -- Gen2 movement: walk randomly so they don't freeze on spawn tile
+      movement = "WALK",
+      range = "ANY_DIR",
+      moving = true,
+      johtoLifeAmbient = true,
+      johtoLifePokemon = isPoke and true or nil,
+      johtoLifeDisplayName = displayName,
+      johtoLifeGender = gender,
+      johtoLifeMon = monName,
+    })
+    if not id and isPoke then
+      -- retry with a neutral sprite if mon sheet missing
+      id, err = mod.world:spawnNpc(mapId, {
+        name = name,
+        sprite = "SPRITE_POKE_BALL",
+        x = x, y = y,
+        text = "",
+        movement = "WALK",
+        range = "ANY_DIR",
+        moving = true,
+        johtoLifeAmbient = true,
+        johtoLifePokemon = true,
+        johtoLifeDisplayName = displayName,
+        johtoLifeMon = monName,
+      })
+    end
+    if not id then
+      mod.log:warn("Johto Life spawn failed: " .. tostring(err) .. " " .. tostring(sprite))
+      return nil
+    end
+    for _, n in ipairs(ow.npcs or {}) do
+      if n.id == id or (n.def and n.def.name == name) then
+        n.def = n.def or {}
+        n.def.johtoLifeAmbient = true
+        n.def.johtoLifePokemon = isPoke and true or nil
+        n.def.johtoLifeDisplayName = displayName
+        n.def.johtoLifeGender = gender
+        n.def.johtoLifeMon = monName
+        n.frozen = false
+        if n.movement == nil then n.movement = "WALK" end
+        return n
+      end
+    end
+    return true
+  end
+
   local function spawnAmbient(mapId)
     if not mapId then return end
     if not (isTown(mapId) or isRoute(mapId) or isIndoor(mapId)) then return end
     local ow = mod.world and mod.world:overworld()
     if not ow or not ow.map or ow.map.id ~= mapId then return end
     local map = ow.map
-    local want = humanTarget(mapId)
-    local have = liveAmbient(ow)
-    while #have > want do
-      local n = table.remove(have)
-      local id = n.id or (n.def and n.def.id)
-      if id then pcall(function() mod.world:removeNpc(id) end) end
-    end
-    local guard = 0
-    while #have < want and guard < want + 20 do
-      guard = guard + 1
-      local x, y = pickCell(ow, map)
-      if not x then break end
-      spawnSerial = spawnSerial + 1
-      local def = SPRITE_DEFS[love.math.random(#SPRITE_DEFS)]
-      local sprite, gender = def[1], def[2]
-      local displayName = randomName(gender)
-      local name = "JOHTO_NPC_" .. tostring(mapId) .. "_" .. spawnSerial
-      local id, err = mod.world:spawnNpc(mapId, {
-        name = name, sprite = sprite, x = x, y = y,
-        text = "", movement = "WALK", range = "ANY_DIR",
-        johtoLifeAmbient = true, johtoLifeDisplayName = displayName, johtoLifeGender = gender,
-      })
-      if not id then
-        mod.log:warn("Johto Life spawn failed: " .. tostring(err) .. " " .. tostring(sprite))
-      else
-        for _, n in ipairs(ow.npcs or {}) do
-          if n.id == id or (n.def and n.def.name == name) then
-            n.def = n.def or {}
-            n.def.johtoLifeAmbient = true
-            n.def.johtoLifeDisplayName = displayName
-            n.def.johtoLifeGender = gender
-            have[#have + 1] = n
-            break
-          end
-        end
+
+    local function balance(want, pokeOnly)
+      local have = liveAmbient(ow, pokeOnly)
+      while #have > want do
+        local n = table.remove(have)
+        local id = n.id or (n.def and n.def.id)
+        if id then pcall(function() mod.world:removeNpc(id) end) end
+      end
+      local guard = 0
+      while #have < want and guard < want + 25 do
+        guard = guard + 1
+        local n = spawnOne(ow, map, mapId, pokeOnly)
+        if n then have[#have + 1] = n else break end
       end
     end
+
+    balance(humanTarget(mapId), false)
+    if isTown(mapId) or isRoute(mapId) then
+      balance(pokeTarget(mapId), true)
+    end
   end
+
   local function refreshCurrentMap()
     local ow = mod.world and mod.world:overworld()
     if ow and ow.map then spawnAmbient(ow.map.id) end
@@ -203,20 +320,51 @@ return function(mod)
     return nil
   end
 
-  -- ===== Options (submenu; value ">" so UI does not show N/A) =====
+  -- Display name for ANY npc (story or ambient)
+  local nameCache = {}
+  local function displayNameFor(npc)
+    if not npc then return "Someone" end
+    local d = npc.def or {}
+    if d.johtoLifeDisplayName then return d.johtoLifeDisplayName end
+    if d.johtoLifeMon then return d.johtoLifeMon end
+    local key = tostring(npc.id or d.name or d.index or npc)
+    if nameCache[key] then return nameCache[key] end
+    -- story NPC: prefer explicit name if human-readable
+    local raw = d.name or d.id or ""
+    raw = tostring(raw)
+    if raw ~= "" and not raw:match("^[%d_]+$") and not raw:find("OBJECT", 1, true)
+        and not raw:find("JOHTO_", 1, true) and #raw < 16 and raw:match("^[%a%d ]+$") then
+      nameCache[key] = raw
+      return raw
+    end
+    -- gender from sprite
+    local spr = tostring(d.sprite or npc.sprite or ""):upper()
+    local gender = "m"
+    if spr:find("LASS", 1, true) or spr:find("_F", 1, true) or spr:find("GIRL", 1, true)
+        or spr:find("BEAUTY", 1, true) or spr:find("GRANNY", 1, true)
+        or spr:find("TEACHER", 1, true) or spr:find("TWIN", 1, true)
+        or spr:find("SKIER", 1, true) or spr:find("BUENA", 1, true) then
+      gender = "f"
+    end
+    local nm = randomName(gender)
+    nameCache[key] = nm
+    d.johtoLifeDisplayName = nm
+    return nm
+  end
+
   local function openJohtoOptions(parentGame)
     local ListMenu = safeRequire("src.ui.ListMenu") or safeRequire("src.menu.ListMenu")
     local g = parentGame or G()
     if not (ListMenu and g and g.stack) then
-      mod.log:warn("Johto Life: ListMenu unavailable; change settings under Mods")
+      mod.log:warn("Johto Life: ListMenu unavailable; use Mods panel")
       return
     end
     local function rebuild()
       local items = {
-        { text = "EXTRA NPCS", label = "EXTRA NPCS", value = opt("extra_npcs") and "ON" or "OFF",
+        { text = "EXTRA NPCS", value = opt("extra_npcs") and "ON" or "OFF",
           right = opt("extra_npcs") and "ON" or "OFF",
           apply = function() setOpt("extra_npcs", not opt("extra_npcs")); refreshCurrentMap() end },
-        { text = "EXTRA NPC COUNT", label = "EXTRA NPC COUNT",
+        { text = "EXTRA NPC COUNT",
           value = tostring(math.floor(tonumber(opt("extra_npc_count")) or 0)),
           right = tostring(math.floor(tonumber(opt("extra_npc_count")) or 0)),
           step = function(dir)
@@ -229,10 +377,10 @@ return function(mod)
             local n = math.floor(tonumber(opt("extra_npc_count")) or 0)
             setOpt("extra_npc_count", (n >= 150) and 0 or (n + 1)); refreshCurrentMap()
           end },
-        { text = "INDOOR NPCS", label = "INDOOR NPCS", value = opt("indoor_npcs") and "ON" or "OFF",
+        { text = "INDOOR NPCS", value = opt("indoor_npcs") and "ON" or "OFF",
           right = opt("indoor_npcs") and "ON" or "OFF",
           apply = function() setOpt("indoor_npcs", not opt("indoor_npcs")); refreshCurrentMap() end },
-        { text = "INDOOR NPC COUNT", label = "INDOOR NPC COUNT",
+        { text = "INDOOR NPC COUNT",
           value = tostring(math.floor(tonumber(opt("indoor_npc_count")) or 3)),
           right = tostring(math.floor(tonumber(opt("indoor_npc_count")) or 3)),
           step = function(dir)
@@ -243,13 +391,32 @@ return function(mod)
             local n = math.floor(tonumber(opt("indoor_npc_count")) or 3)
             setOpt("indoor_npc_count", (n >= 30) and 0 or (n + 1)); refreshCurrentMap()
           end },
-        { text = "COMMON COURTESY", label = "COMMON COURTESY",
-          value = opt("common_courtesy") and "ON" or "OFF", right = opt("common_courtesy") and "ON" or "OFF",
+        { text = "POKEMON NPCS", value = opt("pokemon_npcs") and "ON" or "OFF",
+          right = opt("pokemon_npcs") and "ON" or "OFF",
+          apply = function() setOpt("pokemon_npcs", not opt("pokemon_npcs")); refreshCurrentMap() end },
+        { text = "POKEMON NPC COUNT",
+          value = tostring(math.floor(tonumber(opt("pokemon_npc_count")) or 0)),
+          right = tostring(math.floor(tonumber(opt("pokemon_npc_count")) or 0)),
+          step = function(dir)
+            pokeTouched = true; mod.save:set("pokeTouched", true)
+            local n = math.max(0, math.min(50, math.floor(tonumber(opt("pokemon_npc_count")) or 0) + (dir or 1)))
+            setOpt("pokemon_npc_count", n); refreshCurrentMap()
+          end,
+          apply = function()
+            pokeTouched = true; mod.save:set("pokeTouched", true)
+            local n = math.floor(tonumber(opt("pokemon_npc_count")) or 0)
+            setOpt("pokemon_npc_count", (n >= 50) and 0 or (n + 1)); refreshCurrentMap()
+          end },
+        { text = "NAME ALL NPCS", value = opt("name_all_npcs") and "ON" or "OFF",
+          right = opt("name_all_npcs") and "ON" or "OFF",
+          apply = function() setOpt("name_all_npcs", not opt("name_all_npcs")) end },
+        { text = "COMMON COURTESY", value = opt("common_courtesy") and "ON" or "OFF",
+          right = opt("common_courtesy") and "ON" or "OFF",
           apply = function() setOpt("common_courtesy", not opt("common_courtesy")) end },
-        { text = "SLEEPING NPCS", label = "SLEEPING NPCS",
-          value = opt("sleeping_npcs") and "ON" or "OFF", right = opt("sleeping_npcs") and "ON" or "OFF",
+        { text = "SLEEPING NPCS", value = opt("sleeping_npcs") and "ON" or "OFF",
+          right = opt("sleeping_npcs") and "ON" or "OFF",
           apply = function() setOpt("sleeping_npcs", not opt("sleeping_npcs")) end },
-        { text = "SLEEP RATE %", label = "SLEEP RATE %",
+        { text = "SLEEP RATE %",
           value = tostring(math.floor(tonumber(opt("sleep_pct")) or 15)),
           right = tostring(math.floor(tonumber(opt("sleep_pct")) or 15)),
           step = function(dir)
@@ -260,11 +427,12 @@ return function(mod)
             local n = math.floor(tonumber(opt("sleep_pct")) or 15)
             setOpt("sleep_pct", (n >= 100) and 0 or (n + 5))
           end },
-        { text = "DAY SLEEPERS", label = "DAY SLEEPERS",
-          value = opt("day_sleepers") and "ON" or "OFF", right = opt("day_sleepers") and "ON" or "OFF",
+        { text = "DAY SLEEPERS", value = opt("day_sleepers") and "ON" or "OFF",
+          right = opt("day_sleepers") and "ON" or "OFF",
           apply = function() setOpt("day_sleepers", not opt("day_sleepers")) end },
       }
       for _, it in ipairs(items) do
+        it.label = it.text
         it.action = function() if it.apply then it.apply() end end
         it.onSelect = it.action
       end
@@ -297,14 +465,11 @@ return function(mod)
     return {
       label = "JOHTO LIFE", text = "JOHTO LIFE",
       right = ">", value = ">",
-      -- engine variants look for one of these
       onSelect = function() openJohtoOptions(g) end,
       action = function() openJohtoOptions(g) end,
       apply = function() openJohtoOptions(g) end,
-      select = function() openJohtoOptions(g) end,
     }
   end
-
   if mod.hooks and mod.hooks.wrap then
     pcall(function()
       mod.hooks:wrap("ui.options.items", function(next, g, items)
@@ -331,7 +496,7 @@ return function(mod)
     end
   end
 
-  -- ===== Common Courtesy (Gen2) =====
+  -- ===== Common Courtesy (same as 0.1.2) =====
   local Overworld = safeRequire("src.world.OverworldController")
   local TextBox = safeRequire("src.render.TextBox")
   local Strings = safeRequire("src.core.Strings")
@@ -422,8 +587,6 @@ return function(mod)
     mod.save:set("pendingTrespass", nil)
     if world then world.johtoLifeTrespass = nil end
   end
-
-  -- Gen2 eject: use warpToMapId / setMap (startWarpTo is Gen1-shaped)
   local function warpBackTo(world, from)
     if not (from and from.map) then return false end
     local x = tonumber(from.x) or 0
@@ -439,7 +602,6 @@ return function(mod)
     end
     return false
   end
-
   local function tryEject(world, toMap)
     if not opt("common_courtesy") then return false end
     world = world or liveWorld()
@@ -455,23 +617,16 @@ return function(mod)
       clearTrespass(world)
       if world then world.johtoLifeResolving = false end
     end
-    if not pushText(world, "Please come back\nlater, and KNOCK!", finish) then
-      finish()
-    end
+    if not pushText(world, "Please come back\nlater, and KNOCK!", finish) then finish() end
     return true
   end
-
   local function markTrespass(world, dest, fromMap, fromX, fromY)
-    local t = {
-      home = dest,
-      from = { map = fromMap, x = fromX or 0, y = fromY or 0 },
-    }
+    local t = { home = dest, from = { map = fromMap, x = fromX or 0, y = fromY or 0 } }
     pendingTrespass = t
     mod.save:set("pendingTrespass", t)
     if world then world.johtoLifeTrespass = t end
   end
 
-  -- player.warped fires BEFORE setMap on Gen2 — only mark, do not eject yet.
   if mod.events and mod.events.on then
     mod.events:on("player.warped", function(payload)
       payload = payload or {}
@@ -489,7 +644,6 @@ return function(mod)
       end
       markTrespass(world, toMap, fromMap, px, py)
     end)
-    -- After the house map is actually loaded, eject.
     local function onMapIn(p)
       local id = p and (p.mapId or p.id)
       if id then
@@ -503,8 +657,10 @@ return function(mod)
     mod.events:on("mod.options_changed", function(p)
       if not p or p.mod ~= mod.id then return end
       if p.key == "extra_npc_count" then
-        outdoorTouched = true
-        mod.save:set("outdoorTouched", true)
+        outdoorTouched = true; mod.save:set("outdoorTouched", true)
+      end
+      if p.key == "pokemon_npc_count" then
+        pokeTouched = true; mod.save:set("pokeTouched", true)
       end
       refreshCurrentMap()
     end)
@@ -565,7 +721,6 @@ return function(mod)
         return baseWorldWarp(self, warpDef)
       end
     end
-    -- Also tick eject from Gen2 World:step if present
     if World2 and type(World2.step) == "function" then
       local baseStep = World2.step
       World2.step = function(self, ...)
@@ -597,6 +752,13 @@ return function(mod)
         markKnown(w)
         pushText(world, "Welcome! Thank you\nfor knocking.")
       end
+      -- keep ambient humans walking (unfreeze non-sleepers)
+      for _, npc in ipairs(world.npcs or {}) do
+        local d = npc.def or {}
+        if d.johtoLifeAmbient and not npc.nightlifeSleeping then
+          npc.frozen = false
+        end
+      end
       if opt("sleeping_npcs") then
         local pct = math.floor(tonumber(opt("sleep_pct")) or 15)
         local isNight = false
@@ -606,7 +768,7 @@ return function(mod)
         end
         for _, npc in ipairs(world.npcs or {}) do
           local d = npc.def or {}
-          if d.johtoLifeAmbient then
+          if d.johtoLifeAmbient and not d.johtoLifePokemon then
             local s = tostring(npc.id or d.name or "")
             local h = 0
             for i = 1, #s do h = h + s:byte(i) * i end
@@ -624,18 +786,29 @@ return function(mod)
         end
       end
       if world.map and (isTown(world.map.id) or isRoute(world.map.id) or isIndoor(world.map.id)) then
-        local want = humanTarget(world.map.id)
-        if #liveAmbient(world) ~= want then spawnAmbient(world.map.id) end
+        local wantH = humanTarget(world.map.id)
+        local wantP = pokeTarget(world.map.id)
+        if #liveAmbient(world, false) ~= wantH or #liveAmbient(world, true) ~= wantP then
+          spawnAmbient(world.map.id)
+        end
       end
     end
 
+    -- Talk: ambient, Pokemon ambient, and optional name-prefix for story NPCs
     local baseTalk = Overworld.talkTo
     Overworld.talkTo = function(world, npc)
       local d = npc and npc.def
       if d and d.johtoLifeAmbient then
-        local display = d.johtoLifeDisplayName or "Someone"
+        local display = d.johtoLifeDisplayName or displayNameFor(npc)
         if npc.nightlifeSleeping then
           pushText(world, display .. " is fast\nasleep.")
+          return true
+        end
+        if d.johtoLifePokemon then
+          local mon = d.johtoLifeMon or display
+          local fmt = POKE_CRY_LINES[love.math.random(#POKE_CRY_LINES)]
+          local body = fmt:format(mon, mon)
+          pushText(world, display .. ":\n" .. body)
           return true
         end
         local name = tostring(d.name or "")
@@ -646,6 +819,19 @@ return function(mod)
         pushText(world, display .. ":\n" .. pool[((idx + h - 1) % #pool) + 1])
         return true
       end
+      -- Story / original NPCs: keep their dialogue, but show a name first
+      if opt("name_all_npcs") and npc then
+        local display = displayNameFor(npc)
+        -- Let vanilla talk run; if it shows text without a name, we still
+        -- try to surface the name in a short line when possible.
+        if type(baseTalk) == "function" then
+          local handled = baseTalk(world, npc)
+          if handled then return true end
+        end
+        -- Fallback if vanilla had nothing
+        pushText(world, display .. ":\n...")
+        return true
+      end
       if type(baseTalk) == "function" then return baseTalk(world, npc) end
       return false
     end
@@ -653,5 +839,5 @@ return function(mod)
     mod.log:warn("Johto Life: Overworld facade missing")
   end
 
-  mod.log:info("Johto Life 0.1.2 loaded")
+  mod.log:info("Johto Life 0.1.3 loaded")
 end
