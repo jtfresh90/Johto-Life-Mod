@@ -2,16 +2,24 @@
 
 Ambient NPCs and Common Courtesy for **Pokémon Gold / Silver / Crystal** on [gen1recomp](https://github.com/bryanthaboi/gen1recomp).
 
-**Gen 2 only.** For Red/Blue/Yellow use [Kanto Life](https://github.com/jtfresh90/Kanto-Life-Mod).
+**This is a separate repo from [Kanto Life](https://github.com/jtfresh90/Kanto-Life-Mod)** (Red/Blue/Yellow).
+
+**Repo:** https://github.com/jtfresh90/Johto-Life-Mod
 
 ## Install
 
-1. Download `main.lua` and `manifest.json` from this repo (or a release zip).
-2. Zip them together with both files at the **root** of the zip.
-3. Import the zip in gen1recomp.
-4. Enable **Johto Life** only (do not enable Kanto Life at the same time).
+Download these two files and zip them at the **root** of the zip:
 
-Compatible with gen1recomp **0.2.x** (`game_version` covers through 9.x).
+1. **main.lua** (full module):  
+   https://raw.githubusercontent.com/jtfresh90/Kanto-Life-Mod/main/johto-life/main.lua  
+   *(complete 0.1.1 source — use this until root `main.lua` in this repo is fully synced)*
+
+2. **manifest.json** (this repo):  
+   https://raw.githubusercontent.com/jtfresh90/Johto-Life-Mod/main/manifest.json
+
+Then import the zip in gen1recomp and enable **Johto Life** only (not Kanto Life).
+
+Compatible with gen1recomp **0.2.x**.
 
 ## Features
 
@@ -33,4 +41,4 @@ Compatible with gen1recomp **0.2.x** (`game_version` covers through 9.x).
 
 ## License
 
-Fan project for use with gen1recomp. Not affiliated with Nintendo/Game Freak/The Pokémon Company.
+Fan project for use with gen1recomp. Not affiliated with Nintendo / Game Freak / The Pokémon Company.
