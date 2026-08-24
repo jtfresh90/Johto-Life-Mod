@@ -1,5 +1,5 @@
 return function(mod)
-  -- Johto Life 0.1.4 — Gen2 only
+  -- Johto Life 0.1.5 — Gen2 only
   local function resolveGame()
     if mod.game ~= nil then return mod.game end
     if mod.world and mod.world.game ~= nil then return mod.world.game end
@@ -128,9 +128,7 @@ return function(mod)
       return math.max(0, math.floor(tonumber(opt("indoor_npc_count")) or 3))
     end
     if not (isTown(mapId) or isRoute(mapId)) then return 0 end
-    if outdoorTouched then
-      return math.max(0, math.floor(tonumber(opt("extra_npc_count")) or 0))
-    end
+    if outdoorTouched then return math.max(0, math.floor(tonumber(opt("extra_npc_count")) or 0)) end
     local n = math.floor(tonumber(opt("extra_npc_count")) or 0)
     if n > 0 then return n end
     return defaultCount(mapId)
@@ -138,18 +136,12 @@ return function(mod)
   local function pokeTarget(mapId)
     if not opt("pokemon_npcs") then return 0 end
     if not (isTown(mapId) or isRoute(mapId)) then return 0 end
-    if pokeTouched then
-      return math.max(0, math.floor(tonumber(opt("pokemon_npc_count")) or 0))
-    end
     return math.max(0, math.floor(tonumber(opt("pokemon_npc_count")) or 0))
   end
-
   local function cellHasWarp(map, x, y)
     if not map then return false end
-    local entry = nil
-    if map.warpAt then entry = map:warpAt(x, y) end
-    if not entry and map.warpAtCell then entry = map:warpAtCell(x, y) end
-    if entry then return true end
+    if map.warpAt and map:warpAt(x, y) then return true end
+    if map.warpAtCell and map:warpAtCell(x, y) then return true end
     local warps = map.def and map.def.warps or map.warps
     if type(warps) == "table" then
       for _, w in pairs(warps) do
@@ -170,11 +162,9 @@ return function(mod)
       if map.isWalkableCell and not map:isWalkableCell(x, y) then blocked = true end
       if cellHasWarp(map, x, y) then blocked = true end
       if not blocked then
-        for dx = -1, 1 do
-          for dy = -1, 1 do
-            if cellHasWarp(map, x + dx, y + dy) then blocked = true end
-          end
-        end
+        for dx = -1, 1 do for dy = -1, 1 do
+          if cellHasWarp(map, x + dx, y + dy) then blocked = true end
+        end end
       end
       if not blocked then
         for _, e in ipairs(ow.entities or ow.npcs or {}) do
@@ -207,9 +197,7 @@ return function(mod)
     local sprite, gender, displayName, monName
     if isPoke then
       monName = POKE_LIST[love.math.random(#POKE_LIST)]
-      displayName = monName
-      sprite = "SPRITE_" .. monName
-      gender = "m"
+      displayName, sprite, gender = monName, "SPRITE_" .. monName, "m"
     else
       local def = SPRITE_DEFS[love.math.random(#SPRITE_DEFS)]
       sprite, gender = def[1], def[2]
@@ -220,24 +208,18 @@ return function(mod)
     local id, err = mod.world:spawnNpc(mapId, {
       name = name, sprite = sprite, x = x, y = y, text = "",
       movement = "WALK", range = "ANY_DIR", moving = true,
-      johtoLifeAmbient = true,
-      johtoLifePokemon = isPoke and true or nil,
-      johtoLifeDisplayName = displayName,
-      johtoLifeGender = gender,
-      johtoLifeMon = monName,
+      johtoLifeAmbient = true, johtoLifePokemon = isPoke and true or nil,
+      johtoLifeDisplayName = displayName, johtoLifeGender = gender, johtoLifeMon = monName,
     })
     if not id and isPoke then
-      id, err = mod.world:spawnNpc(mapId, {
+      id = mod.world:spawnNpc(mapId, {
         name = name, sprite = "SPRITE_POKE_BALL", x = x, y = y, text = "",
         movement = "WALK", range = "ANY_DIR", moving = true,
         johtoLifeAmbient = true, johtoLifePokemon = true,
         johtoLifeDisplayName = displayName, johtoLifeMon = monName,
       })
     end
-    if not id then
-      mod.log:warn("Johto Life spawn failed: " .. tostring(err))
-      return nil
-    end
+    if not id then return nil end
     for _, n in ipairs(ow.npcs or {}) do
       if n.id == id or (n.def and n.def.name == name) then
         n.def = n.def or {}
@@ -284,60 +266,48 @@ return function(mod)
     return nil
   end
 
-  -- ===== JOHTO LIFE submenu (mod.ui.ListMenu like Wilds) =====
-  local SCREEN_ID = "johto_life:menu"
   local function openJohtoOptions(parentGame)
     local g = parentGame or G()
     local function rebuild()
       local items = {
         { label = "EXTRA NPCS", right = opt("extra_npcs") and "ON" or "OFF",
-          stepper = true, choices = { {label="ON",value=true},{label="OFF",value=false} },
-          current = opt("extra_npcs") and true or false,
-          apply = function(v) setOpt("extra_npcs", v == true); refreshCurrentMap() end },
+          onSelect = function() setOpt("extra_npcs", not opt("extra_npcs")); refreshCurrentMap() end },
         { label = "NPC COUNT", right = tostring(math.floor(tonumber(opt("extra_npc_count")) or 0)),
-          stepper = true,
-          apply = function(dir)
+          onSelect = function()
             outdoorTouched = true; mod.save:set("outdoorTouched", true)
-            local n = math.floor(tonumber(opt("extra_npc_count")) or 0) + (dir or 1)
-            n = math.max(0, math.min(150, n))
-            setOpt("extra_npc_count", n); refreshCurrentMap()
+            local n = math.floor(tonumber(opt("extra_npc_count")) or 0)
+            setOpt("extra_npc_count", (n >= 150) and 0 or (n + 1)); refreshCurrentMap()
           end },
         { label = "INDOOR NPCS", right = opt("indoor_npcs") and "ON" or "OFF",
-          apply = function() setOpt("indoor_npcs", not opt("indoor_npcs")); refreshCurrentMap() end },
+          onSelect = function() setOpt("indoor_npcs", not opt("indoor_npcs")); refreshCurrentMap() end },
         { label = "INDOOR COUNT", right = tostring(math.floor(tonumber(opt("indoor_npc_count")) or 3)),
-          apply = function()
+          onSelect = function()
             local n = math.floor(tonumber(opt("indoor_npc_count")) or 3)
             setOpt("indoor_npc_count", (n >= 30) and 0 or (n + 1)); refreshCurrentMap()
           end },
         { label = "POKE NPCS", right = opt("pokemon_npcs") and "ON" or "OFF",
-          apply = function() setOpt("pokemon_npcs", not opt("pokemon_npcs")); refreshCurrentMap() end },
+          onSelect = function() setOpt("pokemon_npcs", not opt("pokemon_npcs")); refreshCurrentMap() end },
         { label = "POKE COUNT", right = tostring(math.floor(tonumber(opt("pokemon_npc_count")) or 0)),
-          apply = function()
+          onSelect = function()
             pokeTouched = true; mod.save:set("pokeTouched", true)
             local n = math.floor(tonumber(opt("pokemon_npc_count")) or 0)
             setOpt("pokemon_npc_count", (n >= 50) and 0 or (n + 1)); refreshCurrentMap()
           end },
         { label = "COURTESY", right = opt("common_courtesy") and "ON" or "OFF",
-          apply = function() setOpt("common_courtesy", not opt("common_courtesy")) end },
+          onSelect = function() setOpt("common_courtesy", not opt("common_courtesy")) end },
         { label = "SLEEP NPCS", right = opt("sleeping_npcs") and "ON" or "OFF",
-          apply = function() setOpt("sleeping_npcs", not opt("sleeping_npcs")) end },
+          onSelect = function() setOpt("sleeping_npcs", not opt("sleeping_npcs")) end },
         { label = "SLEEP %", right = tostring(math.floor(tonumber(opt("sleep_pct")) or 15)),
-          apply = function()
+          onSelect = function()
             local n = math.floor(tonumber(opt("sleep_pct")) or 15)
             setOpt("sleep_pct", (n >= 100) and 0 or (n + 5))
           end },
         { label = "DAY SLEEP", right = opt("day_sleepers") and "ON" or "OFF",
-          apply = function() setOpt("day_sleepers", not opt("day_sleepers")) end },
+          onSelect = function() setOpt("day_sleepers", not opt("day_sleepers")) end },
         { label = "CANCEL", onSelect = function() end },
       }
-      for _, it in ipairs(items) do
-        it.onSelect = it.onSelect or function()
-          if it.apply then it.apply(1) end
-        end
-      end
       return items
     end
-
     if mod.ui and mod.ui.ListMenu and mod.ui.ListMenu.new then
       local items = rebuild()
       local menu = mod.ui.ListMenu.new(g, "JOHTO LIFE", items, {
@@ -346,27 +316,17 @@ return function(mod)
           if item and item.label == "CANCEL" and m and m.close then m:close() end
         end,
       })
-      if menu and g and g.stack and g.stack.push then
-        g.stack:push(menu)
-      elseif mod.ui.push and menu then
-        -- some builds push via screen id only
-      end
+      if menu and g and g.stack then g.stack:push(menu) end
       return
     end
-
     local ListMenu = safeRequire("src.ui.ListMenu") or safeRequire("src.menu.ListMenu")
     if ListMenu and g and g.stack then
       local items = rebuild()
-      local ok, menu = pcall(function()
-        return ListMenu.new(g, { title = "JOHTO LIFE", items = items })
-      end)
+      local ok, menu = pcall(function() return ListMenu.new(g, { title = "JOHTO LIFE", items = items }) end)
       if ok and menu then g.stack:push(menu) end
-    else
-      mod.log:warn("Johto Life: ListMenu unavailable")
     end
   end
 
-  -- Gold OPTIONS is label:value — text/value must be functions or you get N/A
   local function hasLabel(items, label)
     if type(items) ~= "table" then return false end
     for _, it in ipairs(items) do
@@ -387,28 +347,16 @@ return function(mod)
       mod.hooks:wrap("ui.options.rows", function(next, gameArg, rows)
         local out = next(gameArg, rows)
         if type(out) ~= "table" then return out end
-        out = insertOptionsRow(out, {
-          id = "johto_life:open",
-          label = "JOHTO LIFE",
+        return insertOptionsRow(out, {
+          id = "johto_life:open", label = "JOHTO LIFE",
           text = function() return "OPEN" end,
           value = function() return "OPEN" end,
-          activate = function(g)
-            openJohtoOptions(g or gameArg)
-          end,
+          activate = function(g) openJohtoOptions(g or gameArg) end,
         })
-        return out
       end)
     end)
   end
-  if mod.content and mod.content.screens and mod.content.screens.register then
-    pcall(function()
-      mod.content.screens:register(SCREEN_ID, {
-        new = function(g) openJohtoOptions(g) return nil end,
-      })
-    end)
-  end
 
-  -- ===== Common Courtesy =====
   local Overworld = safeRequire("src.world.OverworldController")
   local TextBox = safeRequire("src.render.TextBox")
   local Strings = safeRequire("src.core.Strings")
@@ -494,8 +442,7 @@ return function(mod)
   end
   local pendingTrespass = mod.save:get("pendingTrespass")
   local function clearTrespass(world)
-    pendingTrespass = nil
-    mod.save:set("pendingTrespass", nil)
+    pendingTrespass = nil; mod.save:set("pendingTrespass", nil)
     if world then world.johtoLifeTrespass = nil end
   end
   local function warpBackTo(world, from)
@@ -517,8 +464,7 @@ return function(mod)
     if world then world.johtoLifeResolving = true end
     local from = trespass.from or {}
     local function finish()
-      warpBackTo(world, from)
-      clearTrespass(world)
+      warpBackTo(world, from); clearTrespass(world)
       if world then world.johtoLifeResolving = false end
     end
     if not pushText(world, "Please come back\nlater, and KNOCK!", finish) then finish() end
@@ -526,9 +472,101 @@ return function(mod)
   end
   local function markTrespass(world, dest, fromMap, fromX, fromY)
     local t = { home = dest, from = { map = fromMap, x = fromX or 0, y = fromY or 0 } }
-    pendingTrespass = t
-    mod.save:set("pendingTrespass", t)
+    pendingTrespass = t; mod.save:set("pendingTrespass", t)
     if world then world.johtoLifeTrespass = t end
+  end
+
+  -- Story names: real assigned names only (never random Aaron/Amy for story)
+  local STORY_SPRITE_NAMES = {
+    SPRITE_MOM = "MOM", MOM = "MOM", SPRITE_ELM = "PROF.ELM", ELM = "PROF.ELM",
+    SPRITE_NURSE = "NURSE", NURSE = "NURSE", SPRITE_CLERK = "CLERK",
+    SPRITE_RECEPTIONIST = "RECEPTIONIST", SPRITE_SILVER = "SILVER",
+    SPRITE_RIVAL = "SILVER", SPRITE_RED = "RED", SPRITE_BLUE = "BLUE",
+    SPRITE_OAK = "PROF.OAK", OAK = "PROF.OAK", SPRITE_BILL = "BILL",
+    SPRITE_KURT = "KURT", SPRITE_FALKNER = "FALKNER", SPRITE_BUGSY = "BUGSY",
+    SPRITE_WHITNEY = "WHITNEY", SPRITE_MORTY = "MORTY", SPRITE_CHUCK = "CHUCK",
+    SPRITE_JASMINE = "JASMINE", SPRITE_PRYCE = "PRYCE", SPRITE_CLAIR = "CLAIR",
+    SPRITE_WILL = "WILL", SPRITE_KOGA = "KOGA", SPRITE_BRUNO = "BRUNO",
+    SPRITE_KAREN = "KAREN", SPRITE_LANCE = "LANCE",
+  }
+  local function bodyToString(body)
+    if body == nil then return "" end
+    if type(body) == "string" then return body end
+    if type(body) == "table" then
+      if type(body.text) == "string" then return body.text end
+      if type(body[1]) == "string" then return body[1] end
+    end
+    local ok, s = pcall(tostring, body)
+    return (ok and s) or ""
+  end
+  local function alreadyHasName(text, name)
+    if not text or not name or name == "" then return false end
+    local t, n = text:upper(), name:upper()
+    if t:sub(1, #n) == n then
+      local c = t:sub(#n + 1, #n + 1)
+      if c == ":" or c == "\n" or c == " " or c == "" then return true end
+    end
+    return false
+  end
+  local function storyDisplayName(npc)
+    if not npc then return nil end
+    local d = npc.def or {}
+    if d.johtoLifeAmbient then return nil end
+    if type(d.johtoLifeStoryName) == "string" and d.johtoLifeStoryName ~= "" then
+      return d.johtoLifeStoryName
+    end
+    if type(d.name) == "string" and #d.name >= 2 and #d.name <= 14 then
+      if d.name:match("^[%a][%a%s%.%-]*$") and not d.name:find("JOHTO_", 1, true) then
+        return d.name:upper()
+      end
+    end
+    local tr = d.trainer
+    if type(tr) == "table" then
+      local class = type(tr.class) == "string" and tr.class or nil
+      local tname = type(tr.name) == "string" and tr.name or nil
+      if class and tname and #tname > 0 then return (class .. " " .. tname):upper() end
+      if tname and #tname > 0 then return tname:upper() end
+      if class and #class > 0 then return class:upper() end
+    end
+    local spr = tostring(d.sprite or ""):upper()
+    if STORY_SPRITE_NAMES[spr] then return STORY_SPRITE_NAMES[spr] end
+    for k, v in pairs(STORY_SPRITE_NAMES) do
+      if spr:find(k, 1, true) then return v end
+    end
+    local sk = tostring(d.scriptKey or d.script or "")
+    local from = sk:match("([%a]+)Script")
+    if from and #from >= 3 and #from <= 12 then
+      local u = from:upper()
+      if u ~= "OBJECT" and u ~= "STD" and u ~= "GENERIC" and u ~= "ITEM" and u ~= "HIDDEN" then
+        return u
+      end
+    end
+    return nil
+  end
+  local function prefixStoryText(body, name)
+    local text = bodyToString(body)
+    if text == "" or alreadyHasName(text, name) then return body end
+    return name .. ":\n" .. text
+  end
+
+  -- Deep hooks: keep vanilla body, prefix real name when talkNpc is set
+  local World2 = safeRequire("src.world.gen2.World")
+  if World2 and type(World2.showText) == "function" then
+    local baseShowText = World2.showText
+    World2.showText = function(self, body, onDone, stay, hold)
+      local nm = storyDisplayName(self and self.talkNpc)
+      if nm then body = prefixStoryText(body, nm) end
+      return baseShowText(self, body, onDone, stay, hold)
+    end
+  end
+  if TextBox and type(TextBox.new) == "function" then
+    local baseTB = TextBox.new
+    TextBox.new = function(gameArg, text, onDone, opts)
+      local world = liveWorld()
+      local nm = storyDisplayName(world and world.talkNpc)
+      if nm then text = prefixStoryText(text, nm) end
+      return baseTB(gameArg, text, onDone, opts)
+    end
   end
 
   if mod.events and mod.events.on then
@@ -574,17 +612,14 @@ return function(mod)
               choice = function(yes)
                 local h = homes[key(dest)] or {}
                 if yes then
-                  h.knocked = true
-                  homes[key(dest)] = h; saveHomes()
+                  h.knocked = true; homes[key(dest)] = h; saveHomes()
                   clearTrespass(world)
                   pushText(world, "KNOCK! KNOCK!\nCome in!", function()
                     world.johtoLifeWelcome = dest
                     if world.takeWarp then world:takeWarp(def)
                     elseif Overworld.takeWarp then Overworld.takeWarp(def) end
                   end)
-                else
-                  homes[key(dest)] = h; saveHomes()
-                end
+                else homes[key(dest)] = h; saveHomes() end
               end
             })
             return true
@@ -595,7 +630,6 @@ return function(mod)
       if world and world.interactBody then return world:interactBody() end
     end
 
-    local World2 = safeRequire("src.world.gen2.World")
     if World2 and type(World2.takeWarp) == "function" then
       local baseWorldWarp = World2.takeWarp
       World2.takeWarp = function(self, warpDef)
@@ -604,8 +638,7 @@ return function(mod)
           if isHouseDest(dest) and not resident(self.map.id) then
             local h = homes[key(dest)] or {}
             if not isKnown(dest) and not h.knocked and (h.lockedUntil or 0) > now() then
-              pushText(self, "Please try again\nin 5 minutes.")
-              return false
+              pushText(self, "Please try again\nin 5 minutes."); return false
             end
             if not isKnown(dest) and not h.knocked then
               markTrespass(self, dest, self.map.id, self.player.cellX, self.player.cellY)
@@ -632,19 +665,15 @@ return function(mod)
       local p = world.player
       if p and world.map then
         local mid = world.map.id
-        if lastCell.map ~= mid then
-          lastCell.map, lastCell.x, lastCell.y = mid, p.cellX, p.cellY
+        if lastCell.map ~= mid then lastCell.map, lastCell.x, lastCell.y = mid, p.cellX, p.cellY
         elseif lastCell.x ~= p.cellX or lastCell.y ~= p.cellY then
-          lastCell.x, lastCell.y = p.cellX, p.cellY
-          setSteps(steps() + 1)
+          lastCell.x, lastCell.y = p.cellX, p.cellY; setSteps(steps() + 1)
         end
       end
       tryEject(world, world.map and world.map.id)
       if world.johtoLifeWelcome and world.map and world.map.id == world.johtoLifeWelcome then
-        local w = world.johtoLifeWelcome
-        world.johtoLifeWelcome = nil
-        markKnown(w)
-        pushText(world, "Welcome! Thank you\nfor knocking.")
+        local w = world.johtoLifeWelcome; world.johtoLifeWelcome = nil
+        markKnown(w); pushText(world, "Welcome! Thank you\nfor knocking.")
       end
       for _, npc in ipairs(world.npcs or {}) do
         local d = npc.def or {}
@@ -661,8 +690,7 @@ return function(mod)
           local d = npc.def or {}
           if d.johtoLifeAmbient and not d.johtoLifePokemon then
             local s = tostring(npc.id or d.name or "")
-            local h = 0
-            for i = 1, #s do h = h + s:byte(i) * i end
+            local h = 0; for i = 1, #s do h = h + s:byte(i) * i end
             local daySleeper = opt("day_sleepers") and ((h % 10) < 3)
             local window = daySleeper and (not isNight) or false
             if daySleeper then window = not isNight else window = isNight end
@@ -682,39 +710,31 @@ return function(mod)
       end
     end
 
-    -- Talk: ONLY ambient/poke get custom lines. Story NPCs = pure vanilla.
     local baseTalk = Overworld.talkTo
     Overworld.talkTo = function(world, npc)
       local d = npc and npc.def
       if d and d.johtoLifeAmbient then
         local display = d.johtoLifeDisplayName or "Someone"
         if npc.nightlifeSleeping then
-          pushText(world, display .. " is fast\nasleep.")
-          return true
+          pushText(world, display .. " is fast\nasleep."); return true
         end
         if d.johtoLifePokemon then
           local mon = d.johtoLifeMon or display
           local fmt = POKE_CRY_LINES[love.math.random(#POKE_CRY_LINES)]
-          pushText(world, display .. ":\n" .. fmt:format(mon, mon))
-          return true
+          pushText(world, display .. ":\n" .. fmt:format(mon, mon)); return true
         end
         local name = tostring(d.name or "")
         local pool = name:find("ROUTE", 1, true) and routeLines or lines
         local idx = tonumber(name:match("_(%d+)$")) or 1
-        local h = 0
-        for i = 1, #name do h = h + name:byte(i) * i end
-        pushText(world, display .. ":\n" .. pool[((idx + h - 1) % #pool) + 1])
-        return true
+        local h = 0; for i = 1, #name do h = h + name:byte(i) * i end
+        pushText(world, display .. ":\n" .. pool[((idx + h - 1) % #pool) + 1]); return true
       end
-      -- Story / original NPCs: never replace dialogue
-      if type(baseTalk) == "function" then
-        return baseTalk(world, npc)
-      end
+      if type(baseTalk) == "function" then return baseTalk(world, npc) end
       return false
     end
   else
     mod.log:warn("Johto Life: Overworld facade missing")
   end
 
-  mod.log:info("Johto Life 0.1.4 loaded")
+  mod.log:info("Johto Life 0.1.5 loaded")
 end
