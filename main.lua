@@ -1,5 +1,5 @@
 return function(mod)
-  -- Johto Life 0.1.7 — Gen2 only
+  -- Johto Life 0.1.8 — Gen2 only
   local function resolveGame()
     if mod.game ~= nil then return mod.game end
     if mod.world and mod.world.game ~= nil then return mod.world.game end
@@ -315,7 +315,6 @@ return function(mod)
     return nil
   end
 
-  -- input.pressed is a TABLE of edges, not a method
   local function navPressed(input, dir)
     if not input then return false end
     if type(input.pressed) == "table" and input.pressed[dir] then return true end
@@ -431,7 +430,6 @@ return function(mod)
         end
       end
       if menuRef and g and g.stack then g.stack:push(menuRef) end
-      return
     end
   end
 
@@ -524,6 +522,7 @@ return function(mod)
   local function pushText(world, msg, onDone, opts)
     local g = G()
     if g and g.stack and TextBox and Strings then
+      -- Skip TextBox name-prefix for our own ambient dialogue
       g.stack:push(TextBox.new(g, Strings(msg), onDone, opts))
       return true
     end
@@ -595,25 +594,55 @@ return function(mod)
     SPRITE_WILL = "WILL", SPRITE_KOGA = "KOGA", SPRITE_BRUNO = "BRUNO",
     SPRITE_KAREN = "KAREN", SPRITE_LANCE = "LANCE", SPRITE_RED = "RED",
   }
-  local FEMALE_SPRITE_KEYS = {
-    "LASS", "BEAUTY", "TWIN", "TEACHER", "SKIER", "BUENA", "SWIMMER_GIRL",
-    "POKEFAN_F", "COOLTRAINER_F", "GRANNY", "NURSE", "MOM", "RECEPTIONIST",
-    "WHITNEY", "JASMINE", "CLAIR", "KAREN", "_F",
+  -- Exact female sprite tokens (avoid partial false matches)
+  local FEMALE_SPRITE_EXACT = {
+    SPRITE_LASS = true, LASS = true, SPRITE_BEAUTY = true, BEAUTY = true,
+    SPRITE_TWIN = true, TWIN = true, SPRITE_TEACHER = true, TEACHER = true,
+    SPRITE_SKIER = true, SKIER = true, SPRITE_BUENA = true, BUENA = true,
+    SPRITE_SWIMMER_GIRL = true, SWIMMER_GIRL = true,
+    SPRITE_POKEFAN_F = true, POKEFAN_F = true,
+    SPRITE_COOLTRAINER_F = true, COOLTRAINER_F = true,
+    SPRITE_GRANNY = true, GRANNY = true, SPRITE_NURSE = true, NURSE = true,
+    SPRITE_MOM = true, MOM = true, SPRITE_RECEPTIONIST = true,
+    SPRITE_WHITNEY = true, SPRITE_JASMINE = true, SPRITE_CLAIR = true,
+    SPRITE_KAREN = true, SPRITE_KIMONO_GIRL = true,
   }
-  local function genderFromSprite(spr)
-    spr = tostring(spr or ""):upper()
-    for _, k in ipairs(FEMALE_SPRITE_KEYS) do
-      if spr:find(k, 1, true) then return "f" end
-    end
-    return "m"
+  local function spriteKeyOf(npc)
+    local d = npc and npc.def or {}
+    local spr = d.sprite or npc.spriteId or d.spriteId
+    if type(spr) == "string" then return spr:upper() end
+    if type(spr) == "number" then return tostring(spr) end
+    return ""
+  end
+  local function genderFromNpc(npc)
+    local spr = spriteKeyOf(npc)
+    if FEMALE_SPRITE_EXACT[spr] then return "f" end
+    if spr:find("_F$") or spr:find("_F_") or spr:find("GIRL") then return "f" end
+    if spr:find("_M$") or spr:find("_M_") or spr:find("GUY") or spr:find("GRAMPS") then return "m" end
+    -- unknown / numeric sprite: alternate by cell hash, not all one gender
+    local cx = tonumber(npc and npc.cellX) or 0
+    local cy = tonumber(npc and npc.cellY) or 0
+    local idx = tonumber(npc and npc.def and npc.def.index) or 0
+    return ((cx * 17 + cy * 31 + idx * 13) % 2 == 0) and "m" or "f"
   end
   local function stableNameFor(npc)
     local d = npc.def or {}
-    local seed = tostring(d.sprite or "") .. ":" .. tostring(d.index or npc.id or "")
-      .. ":" .. tostring(npc.mapId or "")
-    local h = 0
-    for i = 1, #seed do h = (h * 31 + seed:byte(i)) % 2147483647 end
-    local pool = (genderFromSprite(d.sprite) == "f") and FEMALE_NAMES or MALE_NAMES
+    local parts = {
+      spriteKeyOf(npc),
+      tostring(d.index or ""),
+      tostring(npc.id or ""),
+      tostring(npc.cellX or ""),
+      tostring(npc.cellY or ""),
+      tostring(npc.mapId or d.mapId or ""),
+      tostring(d.name or ""),
+      tostring(d.scriptKey or ""),
+    }
+    local seed = table.concat(parts, ":")
+    local h = 2166136261
+    for i = 1, #seed do
+      h = (h * 16777619 + seed:byte(i)) % 2147483647
+    end
+    local pool = (genderFromNpc(npc) == "f") and FEMALE_NAMES or MALE_NAMES
     return pool[(h % #pool) + 1]
   end
   local function bodyToString(body)
@@ -623,68 +652,68 @@ return function(mod)
     local ok, s = pcall(tostring, body)
     return (ok and s) or ""
   end
-  local function alreadyHasName(text, name)
-    if not text or not name then return false end
-    local t, n = text:upper(), name:upper()
-    if t:sub(1, #n) == n then
-      local c = t:sub(#n + 1, #n + 1)
-      if c == ":" or c == "\n" or c == " " or c == "" then return true end
-    end
+  local function textAlreadyNamed(text)
+    -- Any "Name:\n" or "Name: " prefix — do not double-prefix
+    return type(text) == "string" and text:match("^[%a][%w%s%.%-']*:%s*[\n ]") ~= nil
+  end
+  local function isAmbientNpc(npc)
+    if not npc then return false end
+    local d = npc.def or {}
+    if d.johtoLifeAmbient then return true end
+    local nm = tostring(d.name or npc.id or "")
+    if nm:find("JOHTO_NPC_", 1, true) or nm:find("JOHTO_POKE_", 1, true) then return true end
     return false
   end
-  -- Names for EVERY default NPC: known story/trainer first, else stable English name
   local function storyDisplayName(npc)
     if not npc then return nil end
-    local d = npc.def or {}
-    if d.johtoLifeAmbient then return nil end
-    if type(d.johtoLifeStoryName) == "string" and d.johtoLifeStoryName ~= "" then
-      return d.johtoLifeStoryName
+    -- Never rename or re-prefix spawned / ambient NPCs
+    if isAmbientNpc(npc) then return nil end
+    -- Cache on the NPC instance (not def — def may be shared)
+    if type(npc.johtoLifeStoryName) == "string" and npc.johtoLifeStoryName ~= "" then
+      return npc.johtoLifeStoryName
     end
+    local d = npc.def or {}
     if type(d.name) == "string" and #d.name >= 2 and #d.name <= 14
-        and d.name:match("^[%a][%a%s%.%-]*$") and not d.name:find("JOHTO_", 1, true) then
-      d.johtoLifeStoryName = d.name:upper()
-      return d.johtoLifeStoryName
+        and d.name:match("^[%a][%a%s%.%-]*$")
+        and not d.name:find("JOHTO_", 1, true) then
+      npc.johtoLifeStoryName = d.name:upper()
+      return npc.johtoLifeStoryName
     end
     local tr = d.trainer
     if type(tr) == "table" then
       if type(tr.name) == "string" and tr.name ~= "" then
         local nm = (type(tr.class) == "string" and tr.class ~= "" and (tr.class .. " " .. tr.name) or tr.name):upper()
-        d.johtoLifeStoryName = nm
+        npc.johtoLifeStoryName = nm
         return nm
       end
       if type(tr.class) == "string" and tr.class ~= "" then
-        d.johtoLifeStoryName = tr.class:upper()
-        return d.johtoLifeStoryName
+        npc.johtoLifeStoryName = tr.class:upper()
+        return npc.johtoLifeStoryName
       end
     end
-    local spr = tostring(d.sprite or ""):upper()
+    local spr = spriteKeyOf(npc)
     if STORY_SPRITE_NAMES[spr] then
-      d.johtoLifeStoryName = STORY_SPRITE_NAMES[spr]
-      return d.johtoLifeStoryName
+      npc.johtoLifeStoryName = STORY_SPRITE_NAMES[spr]
+      return npc.johtoLifeStoryName
     end
-    for k, v in pairs(STORY_SPRITE_NAMES) do
-      if spr:find(k, 1, true) then
-        d.johtoLifeStoryName = v
-        return v
-      end
-    end
+    -- exact key only (no partial find — that caused wrong shared names)
     local sk = tostring(d.scriptKey or "")
     local from = sk:match("([%a]+)Script")
     if from and #from >= 3 and #from <= 12 then
       local u = from:upper()
       if u ~= "OBJECT" and u ~= "STD" and u ~= "GENERIC" and u ~= "ITEM" and u ~= "HIDDEN" then
-        d.johtoLifeStoryName = u
+        npc.johtoLifeStoryName = u
         return u
       end
     end
-    -- Generic map NPCs: stable gendered English name (same NPC always same name)
     local assigned = stableNameFor(npc)
-    d.johtoLifeStoryName = assigned
+    npc.johtoLifeStoryName = assigned
     return assigned
   end
   local function prefixStoryText(body, name)
     local text = bodyToString(body)
-    if text == "" or alreadyHasName(text, name) then return body end
+    if text == "" then return body end
+    if textAlreadyNamed(text) then return body end
     return name .. ":\n" .. text
   end
 
@@ -692,7 +721,15 @@ return function(mod)
   if World2 and type(World2.showText) == "function" then
     local baseShowText = World2.showText
     World2.showText = function(self, body, onDone, stay, hold)
-      local nm = storyDisplayName(self and self.talkNpc)
+      local text = bodyToString(body)
+      if textAlreadyNamed(text) then
+        return baseShowText(self, body, onDone, stay, hold)
+      end
+      local talker = self and self.talkNpc
+      if isAmbientNpc(talker) then
+        return baseShowText(self, body, onDone, stay, hold)
+      end
+      local nm = storyDisplayName(talker)
       if nm then body = prefixStoryText(body, nm) end
       return baseShowText(self, body, onDone, stay, hold)
     end
@@ -700,8 +737,16 @@ return function(mod)
   if TextBox and type(TextBox.new) == "function" then
     local baseTB = TextBox.new
     TextBox.new = function(gameArg, text, onDone, opts)
+      local raw = bodyToString(text)
+      if textAlreadyNamed(raw) then
+        return baseTB(gameArg, text, onDone, opts)
+      end
       local world = liveWorld()
-      local nm = storyDisplayName(world and world.talkNpc)
+      local talker = world and world.talkNpc
+      if isAmbientNpc(talker) then
+        return baseTB(gameArg, text, onDone, opts)
+      end
+      local nm = storyDisplayName(talker)
       if nm then text = prefixStoryText(text, nm) end
       return baseTB(gameArg, text, onDone, opts)
     end
@@ -884,5 +929,5 @@ return function(mod)
     mod.log:warn("Johto Life: Overworld facade missing")
   end
 
-  mod.log:info("Johto Life 0.1.7 loaded")
+  mod.log:info("Johto Life 0.1.8 loaded")
 end
