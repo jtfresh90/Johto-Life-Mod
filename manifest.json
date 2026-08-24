@@ -1,7 +1,7 @@
 {
   "id": "johto_life",
   "name": "Johto Life",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "api": 2,
   "entry": "main.lua",
   "profile": "content",
@@ -13,7 +13,7 @@
   "permissions": ["engine_internals"],
   "dependencies": [],
   "conflicts": ["kanto_life"],
-  "description": "Options submenu writes like Mod Manager. Gendered names from real sprite ids.",
+  "description": "Male sprites (POKEFAN_M, fisher, black belt) use male names via sprite index map.",
   "github": "jtfresh90/Johto-Life-Mod",
   "affects_link": false,
   "experimental": false
